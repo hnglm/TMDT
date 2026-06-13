@@ -12,9 +12,11 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Cấu hình các dịch vụ vào vùng chứa (DI Container)
 builder.Services.AddControllers();
 
-// Đăng ký Entity Framework DbContext (sử dụng In-Memory làm mẫu hoặc thay bằng PostgreSQL/SQL Server)
+// Đọc chuỗi kết nối từ appsettings.json thông qua tên "DefaultConnection"
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
-    options.UseInMemoryDatabase("LuxeHomeDb"));
+    options.UseNpgsql(connectionString));
 
 // Đăng ký HttpClient cho dịch vụ AI
 builder.Services.AddHttpClient<IAIService, GeminiAIService>();

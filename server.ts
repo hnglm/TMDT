@@ -1,21 +1,22 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { apiRouter } from "./server/api/routes";
-import { EnvConfig } from "./server/infrastructure/config/EnvConfig";
+import { apiRouter } from "./src/api/routes.ts"; 
 
 const app = express();
-const PORT = EnvConfig.port;
+// Sử dụng trực tiếp process.env thay vì EnvConfig để tránh lỗi thiếu file
+const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 // Base middlewares
 app.use(express.json({ limit: "20mb" }));
 
-// Tiêm toàn bộ định tuyến API từ Composition Root
+// Tiêm toàn bộ định tuyến API
 app.use("/api", apiRouter);
 
 // Cấu hình tích hợp máy chủ tĩnh (Vite)
 async function main() {
-  if (EnvConfig.nodeEnv !== "production") {
+  if (NODE_ENV !== "production") {
     // Chế độ phát triển (Phối hợp Vite middleware tự động làm mới mã client)
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -31,8 +32,8 @@ async function main() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[LuxeHome Server] Chạy thành công chế độ Clean Architecture trên cổng ${PORT}`);
+  app.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`[LuxeHome Server] Máy chủ proxy hoạt động thành công trên cổng ${PORT}`);
   });
 }
 
