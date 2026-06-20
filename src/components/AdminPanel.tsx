@@ -549,7 +549,6 @@ export default function AdminPanel({
                           <option value="shipping">Xe Đang Giao</option>
                           <option value="delivered">Đã Giao Showroom</option>
                           <option value="completed">Đơn Hoàn Tất</option>
-                          <option value="cancelled">Đã Hủy Đơn</option>
                         </select>
                       </td>
                     </tr>

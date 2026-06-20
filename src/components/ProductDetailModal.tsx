@@ -227,8 +227,8 @@ export default function ProductDetailModal({
               <div className="space-y-3">
                 <div className="flex gap-3">
                   <div className="flex items-center border border-[#EADBC8] rounded-xl bg-white overflow-hidden">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  <button
+                      onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
                       className="px-3 py-2 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold"
                     >
                       -

@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+/* Thiết lập Font chữ mặc định cho toàn hệ thống */
+@theme {
+  --font-sans: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Playfair Display', ui-serif, Georgia, serif;
+}

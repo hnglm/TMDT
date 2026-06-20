@@ -5,6 +5,7 @@ import { Order, Product, BlogPost } from "../types";
 interface UserProfileProps {
   currentUser: { name: string; email: string } | null;
   onUpdatePersonalInfo: (name: string, email: string) => void;
+  onCancelOrder?: (orderId: string) => void;
   orders: Order[];
   wishlist: string[];
   products: Product[];
@@ -22,6 +23,7 @@ export default function UserProfile({
   onSelectProduct,
   onRemoveFromWishlist,
   onAddReviewToProduct,
+  onCancelOrder
 }: UserProfileProps) {
   
   // Tab within profile
@@ -165,8 +167,20 @@ export default function UserProfile({
                              order.status === "completed" ? "Hoàn tất" : "Đã Cancel"}
                           </span>
                         </div>
+                        {order.status === "pending" && onCancelOrder && (
+                          <button 
+                            onClick={() => {
+                              if(window.confirm("Quý khách chắc chắn muốn hủy đơn hàng này?")) {
+                                onCancelOrder(order.id);
+                              }
+                            }}
+                            className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
+                          >
+                            Hủy đơn
+                          </button>
+                        )}
                       </div>
-
+                
                       {/* Items row */}
                       <div className="space-y-2">
                         {order.items.map((item, index) => (

@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using LuxeHome.LuxeHome.Domain.Entities;
+using LuxeHome.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace LuxeHome.LuxeHome.Infrastructure.Data;
+namespace LuxeHome.Infrastructure.Data;
 
 public partial class LuxeHomeDbContext : DbContext
 {

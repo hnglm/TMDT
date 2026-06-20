@@ -123,3 +123,6 @@ D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\refint\LuxeHome.dll
 D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\LuxeHome.pdb
 D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\LuxeHome.genruntimeconfig.cache
 D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\ref\LuxeHome.dll
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\LuxeHome.API\appsettings.example.json
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\LuxeHome.API\appsettings.json
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Bogus.dll

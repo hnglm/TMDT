@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace LuxeHome.LuxeHome.Domain.Entities;
+namespace LuxeHome.Domain.Entities;
 
 public partial class Shipment
 {

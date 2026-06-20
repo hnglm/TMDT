@@ -1,6 +1,0 @@
-{
-  "name": "LuxeHome",
-  "description": "Thương hiệu website thương mại điện tử chuyên cung cấp đồ nội thất cao cấp sang trọng.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

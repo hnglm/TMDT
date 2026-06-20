@@ -15,7 +15,7 @@ import ProductDetailModal from "./components/ProductDetailModal";
 import CartSidebar from "./components/CartSidebar";
 import AuthModal from "./components/AuthModal";
 import ChatbotWidget from "./components/ChatbotWidget";
-
+import { useEffect } from "react";
 // Types
 import { Product, Combo, CartItem, Order, ConsultationSchedule, Coupon } from "./types";
 
@@ -46,10 +46,85 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>(["prod-01", "prod-03"]); // Initial pre-liked items for demo aesthetic
 
+  useEffect(() => {
+    fetch('http://localhost:5200/api/promotions')
+    .then(res => {
+      if (!res.ok) throw new Error("Lỗi mạng khi lấy Coupons");
+      return res.json();
+    })
+    .then(data => {
+      if (data && data.length > 0) {
+        setCoupons(data);
+      }
+    })
+    .catch(err => console.error("Lỗi đồng bộ Coupons:", err));
+    }, []);
+
+  useEffect(() => {
+    fetch("http://localhost:5200/api/products")
+      .then(res => {
+        if (!res.ok) throw new Error("Cổng API Backend từ chối kết nối");
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.length > 0) {
+          // Xử lý "Phiên dịch" dữ liệu từ C# sang Frontend
+          const mappedProducts = data.map((item: any) => {
+            
+            // 1. Rút trích mảng Link ảnh từ ProductImages của C#
+            const mappedImages = item.productImages && item.productImages.length > 0 
+              ? item.productImages.map((img: any) => img.imageUrl) 
+              : ["https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=800"]; // Ảnh mặc định
+
+            // 2. Lấy giá tiền từ ProductVariants (nếu có)
+            const currentPrice = item.productVariants && item.productVariants.length > 0 
+              ? item.productVariants[0].currentPrice 
+              : 15000000;
+
+            return {
+              id: item.id.toString(), // Đổi số thành chữ
+              name: item.productName || "Sản phẩm chưa cập nhật",
+              price: currentPrice,
+              rating: item.averageRating || 5,
+              category: item.category?.slug || "phong-khach",
+              categoryName: item.category?.categoryName || "Phòng Khách", // Yêu cầu Backend Include Category
+              style: item.style || "Modern",
+              images: mappedImages,
+              description: item.shortDescription || "",
+              longDescription: item.description || "",
+              material: item.material || "Gỗ tự nhiên cao cấp",
+              dimensions: "Kích thước tiêu chuẩn",
+              colors: item.productVariants?.map((v:any) => v.color).filter(Boolean) || ["Mặc định"],
+              features: ["Bảo hành LuxeHome"],
+              warranty: `${item.warrantyMonths || 12} tháng`,
+              stock: 10,
+              brand: "LuxeHome",
+              reviews: []
+            };
+          });
+
+          // Cập nhật state bằng dữ liệu đã chuẩn hóa
+          setProducts(mappedProducts);
+        }
+      })
+      .catch(err => console.error("❌ Lỗi API (Nhấn F12 để xem chi tiết CORS/Network):", err));
+    }, 
+  []);
   // Authenticated User Session
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>({
+  // Thêm định nghĩa interface hoặc type
+  interface UserSession {
+    name: string;
+    email: string;
+    role?: "user" | "admin";
+    phone?: string;
+  }
+
+  // Cập nhật lại state
+  const [currentUser, setCurrentUser] = useState<UserSession | null>({
     name: "Nguyễn Lâm Thao",
     email: "lamlam548818@gmail.com",
+    role: "user",
+    phone: "0901234567"
   });
 
   // Modal display toggles
@@ -311,7 +386,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === "profile" && (
+        {(activeTab === "profile" || activeTab === "profile-wishlist") && (
           <UserProfile
             currentUser={currentUser}
             onUpdatePersonalInfo={(name, email) => {
@@ -323,25 +398,6 @@ export default function App() {
             wishlist={wishlist}
             products={products}
             onSelectProduct={(p) => setSelectedProductForDetail(p)}
-            onRemoveFromWishlist={handleToggleWishlist}
-            onAddReviewToProduct={handleAddReviewToProduct}
-          />
-        )}
-
-        {activeTab === "profile-wishlist" && (
-          <UserProfile
-            currentUser={currentUser}
-            onUpdatePersonalInfo={(name, email) => {
-              if (currentUser) {
-                setCurrentUser({ name, email });
-              }
-            }}
-            orders={orders}
-            wishlist={wishlist}
-            products={products}
-            onSelectProduct={(p) => {
-              setSelectedProductForDetail(p);
-            }}
             onRemoveFromWishlist={handleToggleWishlist}
             onAddReviewToProduct={handleAddReviewToProduct}
           />
