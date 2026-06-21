@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "D:\\TMDT\\Website\\TMDT\\dotnet-backend\\LuxeHome.csproj": {}
+    "C:\\Users\\ASUS\\TMDT\\dotnet-backend\\LuxeHome.csproj": {}
   },
   "projects": {
-    "D:\\TMDT\\Website\\TMDT\\dotnet-backend\\LuxeHome.csproj": {
+    "C:\\Users\\ASUS\\TMDT\\dotnet-backend\\LuxeHome.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\TMDT\\Website\\TMDT\\dotnet-backend\\LuxeHome.csproj",
+        "projectUniqueName": "C:\\Users\\ASUS\\TMDT\\dotnet-backend\\LuxeHome.csproj",
         "projectName": "LuxeHome",
-        "projectPath": "D:\\TMDT\\Website\\TMDT\\dotnet-backend\\LuxeHome.csproj",
-        "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "D:\\TMDT\\Website\\TMDT\\dotnet-backend\\obj\\",
+        "projectPath": "C:\\Users\\ASUS\\TMDT\\dotnet-backend\\LuxeHome.csproj",
+        "packagesPath": "C:\\Users\\ASUS\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\ASUS\\TMDT\\dotnet-backend\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\ASUS\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -50,9 +50,21 @@
         "net9.0": {
           "targetAlias": "net9.0",
           "dependencies": {
+            "BCrypt.Net-Next": {
+              "target": "Package",
+              "version": "[4.2.0, )"
+            },
             "Bogus": {
               "target": "Package",
               "version": "[35.6.5, )"
+            },
+            "Microsoft.AspNetCore.Authentication.JwtBearer": {
+              "target": "Package",
+              "version": "[9.0.2, )"
+            },
+            "Microsoft.EntityFrameworkCore": {
+              "target": "Package",
+              "version": "[9.0.2, )"
             },
             "Microsoft.EntityFrameworkCore.Design": {
               "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
@@ -66,7 +78,11 @@
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",
-              "version": "[10.2.2, )"
+              "version": "[6.5.0, )"
+            },
+            "System.IdentityModel.Tokens.Jwt": {
+              "target": "Package",
+              "version": "[8.19.1, )"
             }
           },
           "imports": [

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, User, Mail, Lock, Sparkles, AlertCircle, Phone, Facebook, Globe } from "lucide-react";
+import { authApi } from "../api/api"; // Import cụm hàm gọi API đã viết ở file api.ts
 
 interface AuthModalProps {
   onClose: () => void;
@@ -8,14 +9,17 @@ interface AuthModalProps {
 
 export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState("lamlam548818@gmail.com"); // Prepopulate with metadata user
-  const [password, setPassword] = useState("password123");
-  const [name, setName] = useState("Nguyễn Lâm Thao");
-  const [phone, setPhone] = useState("0901234567");
+  const [email, setEmail] = useState(""); 
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
     if (!email || !password) {
       setError("Quý khách hãy nhập đầy đủ thông tin tài khoản.");
       return;
@@ -29,44 +33,60 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
       return;
     }
 
-    // Role-based authorization check: "mk: admin123" for admin access
-    const lowerEmail = email.toLowerCase().trim();
-    if (!isRegister && (lowerEmail === "admin" || lowerEmail === "admin@luxehome.vn")) {
-      if (password === "admin123") {
-        onLogin({
-          name: "Quản trị viên LuxeHome",
-          email: "admin@luxehome.vn",
-          role: "admin",
-          phone: "0900000123"
+    setLoading(true);
+    try {
+      if (isRegister) {
+        // --- 1. XỬ LÝ ĐĂNG KÝ THẬT ---
+        await authApi.register({
+          email: email.trim(),
+          password: password,
+          fullName: name.trim(),
+          phone: phone.trim()
         });
-        onClose();
-        return;
+        alert("Khởi tạo tài khoản thành công! Xin mời quý khách đăng nhập.");
+        setIsRegister(false);
+        setPassword("");
       } else {
-        setError("Mật khẩu Quản trị viên không chính xác. Hãy dùng: admin123");
-        return;
-      }
-    }
+        // --- 2. XỬ LÝ ĐĂNG NHẬP THẬT ---
+        const data = await authApi.login({
+          email: email.trim(),
+          password: password
+        });
 
-    // Success simulation
-    onLogin({
-      name: isRegister ? name : "Nguyễn Lâm Thao",
-      email,
-      role: "user",
-      phone: isRegister ? phone : "0901234567"
-    });
-    onClose();
+        // Đảm bảo bốc chuẩn Token và RoleCode viết thường/viết hoa từ API .NET trả về
+        const token = data.token || data.Token;
+        const userObj = data.user || data.User;
+        const roleCode = userObj?.roleCode || userObj?.RoleCode || "CUSTOMER";
+
+        // 👑 CHUYỂN ĐỔI SANG SESSIONSTORAGE: Lưu JWT Token và RoleCode để tự động xóa sạch khi tắt trình duyệt
+        sessionStorage.setItem("token", token);
+        sessionStorage.setItem("user_role", roleCode);
+
+        // Chuẩn hóa role về dạng "admin" hoặc "user" để khớp với Interface Component App.tsx hiện tại
+        const calculatedRole = (roleCode.toLowerCase() === "admin" || roleCode.toLowerCase() === "manager") 
+          ? "admin" 
+          : "user";
+
+        // Báo trạng thái đăng nhập thành công cho hệ thống React nhận diện điều hướng
+        onLogin({
+          name: userObj?.fullName || userObj?.FullName || "Thành viên VIP",
+          email: userObj?.email || userObj?.Email || email.trim(),
+          role: calculatedRole,
+          phone: userObj?.phone || userObj?.Phone || ""
+        });
+
+        onClose();
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.message || "Kết nối hệ thống thất bại hoặc Sai tài khoản/mật khẩu!");
+    } finally {
+      loading && setLoading(false);
+    }
   };
 
-  // Social linking simulation
   const handleSocialLogin = (platform: "Google" | "Facebook") => {
-    onLogin({
-      name: `Gia chủ ${platform} User`,
-      email: `${platform.toLowerCase()}-member@luxehome.vn`,
-      role: "user",
-      phone: "0909999888"
-    });
-    alert(`Liên kết tài khoản ${platform} thành công! Chào mừng Quý khách đến với LuxeHome.`);
-    onClose();
+    alert(`Tính năng liên kết ${platform} đang được bảo trì nâng cấp.`);
   };
 
   return (
@@ -74,8 +94,6 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose}></div>
 
       <div className="relative bg-[#FAF6F0] w-full max-w-md rounded-2xl p-8 border border-[#EADBC8] shadow-2xl transform transition-all">
-        
-        {/* Close */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-[#8B7E74] hover:text-[#5C4033] p-1.5 rounded-full hover:bg-[#F4EBE1]"
@@ -128,7 +146,6 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
                 </span>
                 <input
                   type="tel"
-                  required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="Ví dụ: 0901234567"
@@ -140,18 +157,18 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
 
           <div>
             <label className="block text-[11px] font-bold text-[#5C4033] uppercase tracking-wider mb-1.5">
-              {isRegister ? "Địa chỉ Email *" : "Tên đăng nhập hoặc Email *"}
+              {isRegister ? "Địa chỉ Email *" : "Địa chỉ Email đăng nhập *"}
             </label>
             <div className="relative">
               <span className="absolute left-3 top-2.5 text-[#8B7E74]">
                 <Mail className="w-4 h-4" />
               </span>
               <input
-                type="text"
+                type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="vip-member@luxehome.vn hoặc admin"
+                placeholder="vip-member@luxehome.vn"
                 className="w-full text-xs bg-white border border-[#EADBC8] rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
               />
             </div>
@@ -176,14 +193,14 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
 
           <button
             type="submit"
-            className="w-full py-3 rounded-xl bg-[#5C4033] hover:bg-[#4A3B32] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-md mt-6 flex items-center justify-center gap-1.5 cursor-pointer"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-[#5C4033] hover:bg-[#4A3B32] disabled:bg-gray-400 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-md mt-6 flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-            {isRegister ? "Khởi Tạo VIP Account" : "Tiến Vào Phòng Trưng Bày"}
+            {loading ? "Đang xử lý..." : isRegister ? "Khởi Tạo VIP Account" : "Tiến Vào Phòng Trưng Bày"}
           </button>
         </form>
 
-        {/* Social Linkages binding */}
         <div className="mt-5 space-y-2.5">
           <div className="relative flex py-2 items-center">
             <div className="flex-grow border-t border-[#EADBC8]"></div>
@@ -195,7 +212,7 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
             <button
               onClick={() => handleSocialLogin("Google")}
               type="button"
-              className="flex items-center justify-center gap-2 py-2 px-3 bg-white hover:bg-gray-50 text-gray-700 hover:text-black border border-[#EADBC8] rounded-xl text-[11px] font-semibold transition-colors shadow-xs cursor-pointer"
+              className="flex items-center justify-center gap-2 py-2 px-3 bg-white hover:bg-gray-50 text-gray-700 border border-[#EADBC8] rounded-xl text-[11px] font-semibold transition-colors shadow-xs cursor-pointer"
             >
               <Globe className="w-3.5 h-3.5 text-blue-500" />
               Google
@@ -203,7 +220,7 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
             <button
               onClick={() => handleSocialLogin("Facebook")}
               type="button"
-              className="flex items-center justify-center gap-2 py-2 px-3 bg-[#1877F2] hover:bg-[#166FE5] text-white border border-transparent rounded-xl text-[11px] font-semibold transition-colors shadow-xs cursor-pointer"
+              className="flex items-center justify-center gap-2 py-2 px-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl text-[11px] font-semibold transition-colors shadow-xs cursor-pointer"
             >
               <Facebook className="w-3.5 h-3.5 text-white fill-current" />
               Facebook
@@ -219,16 +236,8 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
             }}
             className="text-xs text-[#5C4033] hover:underline font-medium cursor-pointer"
           >
-            {isRegister 
-              ? "Đã có tài khoản? Đăng nhập tại đây" 
-              : "Chưa có tài khoản LuxeHome? Đăng ký VIP miễn phí"}
+            {isRegister ? "Đã có tài khoản? Đăng nhập tại đây" : "Chưa có tài khoản LuxeHome? Đăng ký VIP miễn phí"}
           </button>
-        </div>
-
-        {/* Demo hints */}
-        <div className="mt-4 p-3 bg-[#EADBC8]/20 rounded-lg border border-dashed border-[#EADBC8] text-[9.5px] text-[#5C4033] leading-relaxed">
-          💡 <strong>Ủy quyền Quản Trị Viên (Admin):</strong><br/>
-          Tài khoản: <code className="bg-white/80 px-1 rounded font-bold">admin</code> | Mật khẩu: <code className="bg-white/80 px-1 rounded font-bold">admin123</code>
         </div>
       </div>
     </div>

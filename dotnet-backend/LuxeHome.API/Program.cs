@@ -1,9 +1,10 @@
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Builder;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using LuxeHome.Domain.Interfaces;
+using Microsoft.OpenApi.Models;
 using LuxeHome.Infrastructure.Data;
 using LuxeHome.Infrastructure.Services;
 using LuxeHome.Application.UseCases;
@@ -12,68 +13,103 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// ĐOẠN CODE MỚI: Ép cứng chuỗi kết nối trực tiếp không qua file appsettings.json
+builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
+    options.UseNpgsql("Host=localhost;Port=5432;Database=luxhomedb;Username=openpg;Password=12345"));
 
-// 1. Cấu hình các dịch vụ vào vùng chứa (DI Container)
+builder.Services.AddEndpointsApiExplorer();
+
+// Cấu hình Swagger hỗ trợ nhập Token JWT khi test API
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "LuxeHome API", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Nhập token theo định dạng: Bearer {your_token}",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Bỏ qua vòng lặp vô tận khi Serialize dữ liệu có quan hệ 2 chiều (EF Core)
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 
-// Đọc chuỗi kết nối từ appsettings.json thông qua tên "DefaultConnection"
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+// Khởi tạo dịch vụ Xác thực nhận diện Token JWT
+var jwtSecret = builder.Configuration["JwtConfig:Secret"] ?? "LuxeHome_Super_Secret_Key_2026_Pro_Project_Long_String_For_Security";
+var key = Encoding.UTF8.GetBytes(jwtSecret);
 
-builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = false;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
-// Đăng ký HttpClient cho dịch vụ AI
 builder.Services.AddHttpClient<IAIService, GeminiAIService>();
 
-// Đăng ký các trường hợp nghiệm vụ (Application Use Cases)
+// Đăng ký các UseCase Nghiệp vụ
 builder.Services.AddScoped<ChatUseCase>();
 builder.Services.AddScoped<ImageSearchUseCase>();
+builder.Services.AddScoped<UserUseCase>(); // Đăng ký UseCase User mới
 
-// Cấu hình chính sách cho phép CORS giúp Frontend React gọi API dễ dàng
+// Gộp chung chính sách CORS đồng nhất cho Frontend dễ gọi
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("LuxeHomeCorsPolicy", policy =>
+    options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") 
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
 });
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowReactApp",
-        policy => policy.WithOrigins("http://localhost:3000", "http://localhost:5173") 
-                        .AllowAnyHeader()
-                        .AllowAnyMethod());
-});
-
 var app = builder.Build();
 
 app.UseRouting();
-// 2. Định hình đường ống yêu cầu HTTP (Request Pipeline)
+
+app.UseCors("AllowReactApp");
+
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
 
-app.UseCors("LuxeHomeCorsPolicy");
-app.UseCors("AllowReactApp");
-
 app.UseSwagger();
 app.UseSwaggerUI(c => 
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "LuxeHome API V1");
-    c.RoutePrefix = "swagger"; // Đảm bảo URL bắt đầu bằng /swagger
+    c.RoutePrefix = "swagger";
 });
 
+// Kích hoạt Authentication trước Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
@@ -85,14 +121,8 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<LuxeHomeDbContext>();
         await context.Database.MigrateAsync(); 
-
-        // Lấy đối tượng cấu hình IConfiguration từ hệ thống
         var configuration = services.GetRequiredService<IConfiguration>();
-        
-        // Đọc giá trị từ file appsettings.json, mặc định là false nếu không tìm thấy cấu hình
         bool enableSeeding = configuration.GetValue<bool>("SeedDataConfig:EnableSeeding");
-
-        // Truyền biến này vào hàm (Áp dụng kèm theo thay đổi ở Bước 1 của Cách 1)
         await DataSeeder.SeedAsync(context, enableSeeding);
     }
     catch (Exception ex)
@@ -102,7 +132,4 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Khởi chạy Máy chủ .NET
 app.Run("http://localhost:5200");
-
-

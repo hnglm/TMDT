@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LuxeHome")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dff03689ed4f13e3d48b0839b8a5f1929f580db9")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f9336f485137744eaedddfb6c73403d1cc29a783")]
 [assembly: System.Reflection.AssemblyProductAttribute("LuxeHome")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LuxeHome")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
