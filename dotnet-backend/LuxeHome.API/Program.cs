@@ -8,7 +8,12 @@ using LuxeHome.Infrastructure.Data;
 using LuxeHome.Infrastructure.Services;
 using LuxeHome.Application.UseCases;
 
+AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 // 1. Cấu hình các dịch vụ vào vùng chứa (DI Container)
 builder.Services.AddControllers()
@@ -61,6 +66,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("LuxeHomeCorsPolicy");
 app.UseCors("AllowReactApp");
+
+app.UseSwagger();
+app.UseSwaggerUI(c => 
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "LuxeHome API V1");
+    c.RoutePrefix = "swagger"; // Đảm bảo URL bắt đầu bằng /swagger
+});
 
 app.UseAuthorization();
 

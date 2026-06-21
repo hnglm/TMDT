@@ -126,3 +126,9 @@ D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\ref\LuxeHome.dll
 D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\LuxeHome.API\appsettings.example.json
 D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\LuxeHome.API\appsettings.json
 D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Bogus.dll
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\LuxeHome.API\Properties\launchSettings.json
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Microsoft.OpenApi.dll
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Swashbuckle.AspNetCore.Swagger.dll
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Swashbuckle.AspNetCore.SwaggerGen.dll
+D:\TMDT\Website\TMDT\dotnet-backend\bin\Debug\net9.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+D:\TMDT\Website\TMDT\dotnet-backend\obj\Debug\net9.0\LuxeHome.MvcApplicationPartsAssemblyInfo.cs

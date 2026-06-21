@@ -35,7 +35,7 @@ export default function App() {
   const [catalogFilters, setCatalogFilters] = useState<{ category?: string; style?: string }>({});
 
   // Core App State (With reactive local data syncs)
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
   const [combos, setCombos] = useState<Combo[]>(MOCK_COMBOS);
   const [blogs, setBlogs] = useState(MOCK_BLOGS);
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
@@ -257,18 +257,130 @@ export default function App() {
     );
   };
 
-  const handleUpdateProductStock = (productId: string, newStock: number) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, stock: newStock } : p))
-    );
+  const handleAddProductToInventory = async (newProd: Product) => {
+    try {
+      // 1. Map dữ liệu từ Frontend sang chuẩn Payload Backend (CreateProductDto)
+      // Xử lý chuỗi để tạo Slug cơ bản (ví dụ: "Sofa Da Bò" -> "sofa-da-bo")
+      const generateSlug = (text: string) => text.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
+  
+      const payload = {
+        productName: newProd.name,
+        slug: generateSlug(newProd.name),
+        categorySlug: newProd.category, // Gửi slug danh mục để Backend tự dò CategoryId
+        shortDescription: newProd.description,
+        description: newProd.longDescription,
+        material: newProd.material,
+        style: newProd.style,
+        warrantyMonths: parseInt(newProd.warranty) || 12,
+        brand: newProd.brand,
+        status: "Active",
+        
+        // Mảng Hình ảnh (Map sang ProductImageDto)
+        images: newProd.images.map((imgUrl, index) => ({
+          imageUrl: imgUrl,
+          isMain: index === 0,
+          sortOrder: index
+        })),
+  
+        // Mảng Biến thể (Map sang ProductVariantDto để lưu Giá và Màu)
+        variants: newProd.colors.map(color => ({
+          color: color,
+          currentPrice: newProd.price,
+          status: "Active"
+        })),
+  
+        // Khởi tạo tồn kho ban đầu
+        initialStock: newProd.stock
+      };
+  
+      // 2. Gửi Request xuống API
+      const response = await fetch("http://localhost:5200/api/products", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!response.ok) {
+        throw new Error(`Lỗi Server: ${response.statusText}`);
+      }
+  
+      const createdProductFromDb = await response.json();
+  
+      // 3. Map ngược dữ liệu DB trả về thành chuẩn Frontend Product
+      const mappedNewProduct: Product = {
+        id: createdProductFromDb.id.toString(), // ID chuẩn từ DB sinh ra
+        name: createdProductFromDb.productName,
+        price: createdProductFromDb.productVariants?.[0]?.currentPrice || newProd.price,
+        rating: 5, // Sản phẩm mới mặc định 5 sao
+        category: newProd.category,
+        categoryName: newProd.categoryName,
+        style: createdProductFromDb.style || newProd.style,
+        images: createdProductFromDb.productImages?.map((img: any) => img.imageUrl) || newProd.images,
+        description: createdProductFromDb.shortDescription || newProd.description,
+        longDescription: createdProductFromDb.description || newProd.longDescription,
+        material: createdProductFromDb.material || newProd.material,
+        dimensions: newProd.dimensions, // DB không có trường này ở Product gốc, lấy tạm từ UI
+        colors: createdProductFromDb.productVariants?.map((v: any) => v.color) || newProd.colors,
+        features: newProd.features,
+        warranty: `${createdProductFromDb.warrantyMonths} tháng`,
+        stock: newProd.stock, // Cập nhật stock như khai báo
+        brand: newProd.brand,
+        reviews: []
+      };
+  
+      // 4. Cập nhật State UI để hiển thị ngay lập tức
+      setProducts((prev) => [mappedNewProduct, ...prev]);
+      
+      alert("Thêm sản phẩm mới vào danh mục kho LuxeHome thành công!");
+  
+    } catch (error) {
+      console.error("Chi tiết lỗi thêm sản phẩm:", error);
+      alert("Thêm sản phẩm thất bại. Vui lòng kiểm tra lại kết nối Backend.");
+    }
   };
 
-  const handleAddProductToInventory = (newProd: Product) => {
-    setProducts((prev) => [newProd, ...prev]);
+  // Cập nhật hàm Xóa
+  const handleDeleteProduct = async (productId: string) => {
+    const isConfirmed = window.confirm("Anh/Chị có chắc chắn muốn ngừng kinh doanh sản phẩm này?");
+    if (!isConfirmed) return;
+
+    try {
+      const response = await fetch(`http://localhost:5200/api/products/${productId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error("Xóa sản phẩm thất bại.");
+
+      // Xóa thành công dưới DB -> Xóa khỏi UI
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      alert("Đã gỡ sản phẩm khỏi Showcase!");
+    } catch (error) {
+      console.error(error);
+      alert("Lỗi hệ thống khi xóa sản phẩm.");
+    }
   };
 
-  const handleDeleteProduct = (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+  // Cập nhật hàm Đổi tồn kho
+  const handleUpdateProductStock = async (productId: string, newStock: number) => {
+    try {
+      const response = await fetch(`http://localhost:5200/api/products/${productId}/stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStock),
+      });
+
+      if (!response.ok) throw new Error("Lỗi đồng bộ tồn kho.");
+
+      // Cập nhật thành công dưới DB -> Cập nhật UI
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, stock: newStock } : p))
+      );
+    } catch (error) {
+      console.error(error);
+      alert("Không thể cập nhật số lượng tồn kho lúc này.");
+    }
   };
 
   const handleUpdateScheduleStatus = (scheduleId: string, status: ConsultationSchedule["status"]) => {
