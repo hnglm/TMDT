@@ -1,41 +1,57 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:5200/api', 
+  baseURL: '',
   timeout: 10000,
+  headers: {
+    'ngrok-skip-browser-warning': 'true',
+  },
 });
 
-// 👑 SỬA LẠI: Tự động đính kèm Token JWT từ sessionStorage vào Header nếu người dùng đã đăng nhập
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem('token');
+
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-// Các hàm gọi API liên quan tới Người dùng (User)
 export const authApi = {
   login: async (data: any) => {
-    const response = await api.post('/user/login', data);
+    const response = await api.post('/api/user/login', data);
     return response.data;
   },
+
   register: async (data: any) => {
-    const response = await api.post('/user/register', data);
+    const response = await api.post('/api/user/register', data);
     return response.data;
   },
+
   getProfile: async () => {
-    const response = await api.get('/user/profile');
+    const response = await api.get('/api/user/profile');
     return response.data;
   },
+
   getAddresses: async () => {
-    const response = await api.get('/user/addresses');
+    const response = await api.get('/api/user/addresses');
     return response.data;
   },
+
   updateProfile: async (data: { fullName: string; phone: string }) => {
-    const response = await api.put('/user/profile', data);
+    const response = await api.put('/api/user/profile', data);
     return response.data;
-  }
+  },
+
+  facebookLogin: async (data: { token: string }) => {
+    const response = await api.post('/api/user/facebook-login', data);
+    return response.data;
+  },
+  googleLogin: async (data: { token: string }) => {
+  const response = await api.post('/api/user/google-login', data);
+  return response.data;
+},
 };
 
 export default api;

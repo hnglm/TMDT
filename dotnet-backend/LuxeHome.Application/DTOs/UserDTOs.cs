@@ -49,10 +49,6 @@ namespace LuxeHome.Application.DTOs
         public bool IsDefault { get; set; }
     }
 
-    // =========================================================================
-    // 👑 ĐOẠN ĐƯỢC BỔ SUNG: PHỤC VỤ CHỨC NĂNG QUẢN LÝ USER VÀ PHÂN QUYỀN CỦA ADMIN
-    // =========================================================================
-
     public class UserResponse
     {
         public long Id { get; set; }
@@ -75,4 +71,7 @@ namespace LuxeHome.Application.DTOs
         public string Phone { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
     }
+    public class SocialLoginRequest {
+    public string Token { get; set; }
+}
 }

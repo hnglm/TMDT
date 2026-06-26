@@ -29,14 +29,17 @@ import {
   INITIAL_SCHEDULES,
 } from "./mockData";
 
-// Thêm định nghĩa interface hoặc type cho UserSession
 interface UserSession {
+  id?: number | string | null;
   name: string;
+  fullName?: string;
   email: string;
   role?: "user" | "admin";
+  roleCode?: string;
   phone?: string;
+  avatarUrl?: string;
+  status?: string;
 }
-
 export default function App() {
   // Navigation States
   const [activeTab, setActiveTab] = useState<string>("home");
@@ -54,53 +57,120 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<string[]>(["prod-01", "prod-03"]);
 
-  // 👑 CHUYỂN SANG SESSIONSTORAGE: MẤT DATA KHI ĐÓNG TAB TRÌNH DUYỆT
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
-    const savedToken = sessionStorage.getItem("token");
-    const savedRole = sessionStorage.getItem("user_role");
-    
-    if (savedToken && savedRole) {
-      const isAdmin = savedRole.toLowerCase() === "admin" || savedRole.toLowerCase() === "manager";
+  const savedUser =
+    sessionStorage.getItem("user") || localStorage.getItem("user");
+
+  if (savedUser) {
+    try {
+      const parsed = JSON.parse(savedUser);
+
       return {
-        name: isAdmin ? "Nguyen Van Admin" : "Lê Thành Long",
-        email: isAdmin ? "admin@luxehome.vn" : "user@luxehome.vn",
-        role: isAdmin ? "admin" : "user"
+        id: parsed.id || parsed.Id || null,
+        name:
+          parsed.name ||
+          parsed.fullName ||
+          parsed.FullName ||
+          parsed.email ||
+          "Thành viên VIP",
+        fullName:
+          parsed.fullName ||
+          parsed.FullName ||
+          parsed.name ||
+          "Thành viên VIP",
+        email: parsed.email || parsed.Email || "",
+        phone: parsed.phone || parsed.Phone || "",
+        avatarUrl: parsed.avatarUrl || parsed.AvatarUrl || "",
+        role: parsed.role === "admin" ? "admin" : "user",
+        roleCode: parsed.roleCode || parsed.RoleCode || "CUSTOMER",
+        status: parsed.status || parsed.Status || "Active",
       };
+    } catch (err) {
+      console.error("Lỗi đọc user từ storage:", err);
     }
-    return null;
-  });
+  }
 
-  // Tự động nhảy giao diện nếu phát hiện Admin đăng nhập lại
-  useEffect(() => {
-    const savedRole = sessionStorage.getItem("user_role");
-    if (savedRole && (savedRole.toLowerCase() === "admin" || savedRole.toLowerCase() === "manager")) {
-      setActiveTab("admin");
-    }
-  }, []);
+  const savedToken =
+    sessionStorage.getItem("token") || localStorage.getItem("token");
+  const savedRole =
+    sessionStorage.getItem("user_role") || localStorage.getItem("user_role");
 
-  // TỰ ĐỘNG BỐC ĐÚNG SĐT VÀ HỌ TÊN THẬT TỪ POSTGRESQL LÊN FRONTEND
+  if (savedToken && savedRole) {
+    const isAdmin =
+      savedRole.toLowerCase() === "admin" ||
+      savedRole.toLowerCase() === "manager";
+
+    return {
+      name: isAdmin ? "Nguyen Van Admin" : "Thành viên VIP",
+      email: "",
+      role: isAdmin ? "admin" : "user",
+      roleCode: savedRole,
+    };
+  }
+
+  return null;
+});
+
   useEffect(() => {
-    const token = sessionStorage.getItem("token");
-    if (token && currentUser) {
-      import("./api/api").then(({ authApi }) => {
-        authApi.getProfile()
-          .then((profileData) => {
-            if (profileData) {
-              setCurrentUser({
-                name: profileData.fullName || "Thành viên VIP",
-                email: profileData.email,
-                role: (profileData.roleCode?.toLowerCase() === "admin" || profileData.roleCode?.toLowerCase() === "manager") ? "admin" : "user",
-                phone: profileData.phone || ""
-              });
-            }
-          })
-          .catch(err => console.error("Lỗi đồng bộ hồ sơ từ PostgreSQL:", err));
+  const token =
+    sessionStorage.getItem("token") || localStorage.getItem("token");
+
+  if (!token || !currentUser) return;
+
+  if (
+  token === "FACEBOOK_LOGIN_TEMP_TOKEN" ||
+  token === "GOOGLE_LOGIN_TEMP_TOKEN"
+) {
+  return;
+}
+
+  import("./api/api").then(({ authApi }) => {
+    authApi
+      .getProfile()
+      .then((profileData) => {
+        if (profileData) {
+          const roleCode = profileData.roleCode || profileData.RoleCode || "CUSTOMER";
+
+          const syncedUser: UserSession = {
+            id: profileData.id || profileData.Id || currentUser.id,
+            name:
+              profileData.fullName ||
+              profileData.FullName ||
+              currentUser.name ||
+              "Thành viên VIP",
+            fullName:
+              profileData.fullName ||
+              profileData.FullName ||
+              currentUser.fullName,
+            email: profileData.email || profileData.Email || currentUser.email,
+            role:
+              roleCode.toLowerCase() === "admin" ||
+              roleCode.toLowerCase() === "manager"
+                ? "admin"
+                : "user",
+            roleCode,
+            phone: profileData.phone || profileData.Phone || "",
+            avatarUrl:
+              profileData.avatarUrl ||
+              profileData.AvatarUrl ||
+              currentUser.avatarUrl ||
+              "",
+            status: profileData.status || profileData.Status || "Active",
+          };
+
+          setCurrentUser(syncedUser);
+          sessionStorage.setItem("user", JSON.stringify(syncedUser));
+          localStorage.setItem("user", JSON.stringify(syncedUser));
+        }
+      })
+      .catch((err) => {
+        console.error("Lỗi đồng bộ hồ sơ từ PostgreSQL:", err);
       });
-    }
-  }, [activeTab]);
+  });
+}, []);
 
   useEffect(() => {
-    fetch('http://localhost:5200/api/promotions')
+    fetch('/api/promotions')
     .then(res => {
       if (!res.ok) throw new Error("Lỗi mạng khi lấy Coupons");
       return res.json();
@@ -114,7 +184,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5200/api/products")
+    fetch("/api/products")
       .then(res => {
         if (!res.ok) throw new Error("Cổng API Backend từ chối kết nối");
         return res.json();
@@ -178,14 +248,20 @@ export default function App() {
     }
   };
 
-  // 👑 SỬA HÀM LOGOUT: DỌN SẠCH SESSIONSTORAGE GIÚP NÚT THOÁT HOẠT ĐỘNG CHUẨN XÁC
   const handleLogout = () => {
-    setCurrentUser(null);
-    setCart([]);
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user_role");
-    setActiveTab("home");
-  };
+  setCurrentUser(null);
+  setCart([]);
+
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("user_role");
+  sessionStorage.removeItem("user");
+
+  localStorage.removeItem("token");
+  localStorage.removeItem("user_role");
+  localStorage.removeItem("user");
+
+  setActiveTab("home");
+};
 
   const handleAddToCart = (product: Product, quantity: number, color: string, assemble: boolean) => {
     setCart((prevCart) => {
@@ -294,7 +370,7 @@ export default function App() {
         initialStock: newProd.stock
       };
   
-      const response = await fetch("http://localhost:5200/api/products", {
+      const response = await fetch("/api/products", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -336,7 +412,7 @@ export default function App() {
     const isConfirmed = window.confirm("Anh/Chị có chắc chắn muốn ngừng kinh doanh sản phẩm này?");
     if (!isConfirmed) return;
     try {
-      const response = await fetch(`http://localhost:5200/api/products/${productId}`, { method: 'DELETE' });
+      const response = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error("Xóa sản phẩm thất bại.");
       setProducts((prev) => prev.filter((p) => p.id !== productId));
       alert("Đã gỡ sản phẩm khỏi Showcase!");
@@ -347,7 +423,7 @@ export default function App() {
 
   const handleUpdateProductStock = async (productId: string, newStock: number) => {
     try {
-      const response = await fetch(`http://localhost:5200/api/products/${productId}/stock`, {
+      const response = await fetch(`/api/products/${productId}/stock`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStock),

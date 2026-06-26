@@ -29,12 +29,18 @@ namespace LuxeHome.Infrastructure.Data
             await context.Roles.AddRangeAsync(roles);
             await context.SaveChangesAsync();
 
-            var adminRoleId = roles.First(r => r.RoleCode == "ADMIN").Id;
-            var customerRoleId = roles.First(r => r.RoleCode == "CUSTOMER").Id;
+            // 1. Lấy Role ID an toàn hơn
+            var adminRole = await context.Roles.FirstOrDefaultAsync(r => r.RoleCode == "ADMIN");
+            var customerRole = await context.Roles.FirstOrDefaultAsync(r => r.RoleCode == "CUSTOMER");
 
-            // ==========================================
-            // 2. SEED USERS
-            // ==========================================
+            // Kiểm tra null trước khi sử dụng để tránh lỗi CS8602
+            if (adminRole == null || customerRole == null) 
+                throw new Exception("Chưa seed Roles hoặc dữ liệu Roles bị thiếu.");
+
+            var adminRoleId = adminRole.Id;
+            var customerRoleId = customerRole.Id;
+
+            // 2. SEED USERS - Cập nhật Faker để sử dụng ID đã lấy
             var userFaker = new Faker<User>("vi")
                 .RuleFor(u => u.RoleId, f => f.PickRandom(adminRoleId, customerRoleId))
                 .RuleFor(u => u.FullName, f => f.Name.FullName())
@@ -57,9 +63,21 @@ namespace LuxeHome.Infrastructure.Data
             var categoryFaker = new Faker<Category>("vi")
                 // Lấy lần lượt các tên danh mục chuẩn xác
                 .RuleFor(c => c.CategoryName, f => f.PickRandom(categoryNames))
-                .RuleFor(c => c.Slug, (f, c) => c.CategoryName.ToLower().Replace(" ", "-").Replace("đ", "d") + "-" + f.Random.Number(100, 999))
-                .RuleFor(c => c.Description, (f, c) => "Danh mục các sản phẩm nội thất cao cấp dành cho " + c.CategoryName)
-                .RuleFor(c => c.ThumbnailUrl, f => f.Image.PicsumUrl())
+                .RuleFor(c => c.Slug, (f, c) =>
+{
+    var categoryName = c.CategoryName ?? "danh-muc";
+
+    return categoryName
+        .ToLower()
+        .Replace(" ", "-")
+        .Replace("đ", "d")
+        + "-" + f.Random.Number(100, 999);
+})           
+                .RuleFor(c => c.Description, (f, c) =>
+                {
+                    var categoryName = c.CategoryName ?? "danh mục";
+                    return "Danh mục các sản phẩm nội thất cao cấp dành cho " + categoryName;
+                })                .RuleFor(c => c.ThumbnailUrl, f => f.Image.PicsumUrl())
                 .RuleFor(c => c.IsVisible, f => true)
                 .RuleFor(c => c.Status, f => "Active");
 
@@ -75,64 +93,84 @@ namespace LuxeHome.Infrastructure.Data
             var materials = new[] { "Da Bò Tự Nhiên", "Gỗ Sồi Nga", "Đá Cẩm Thạch", "Kính Cường Lực", "Khung Hợp Kim Nôm" };
 
             var productFaker = new Faker<Product>("vi")
-                .RuleFor(p => p.CategoryId, (f, p) => (long?)f.PickRandom(categories).Id)
-                .RuleFor(p => p.ProductCode, f => f.Commerce.Ean13())
-                // Ghép tên sản phẩm có ý nghĩa: VD "Sofa Da Bò Ý Royal"
-                .RuleFor(p => p.ProductName, f => $"{f.PickRandom(productPrefixes)} {f.PickRandom(productStyles)}")
-                .RuleFor(p => p.Slug, (f, p) => p.ProductName.ToLower().Replace(" ", "-").Replace("đ", "d") + "-" + f.Random.AlphaNumeric(5))
-                .RuleFor(p => p.ShortDescription, (f, p) => $"Tuyệt tác {p.ProductName} mang đến không gian sống đẳng cấp.")
-                .RuleFor(p => p.Description, f => "Sản phẩm được chế tác tỉ mỉ từ những nghệ nhân hàng đầu, đảm bảo độ bền bỉ vượt thời gian và tính thẩm mỹ cao nhất cho không gian kiến trúc của bạn.")
-                .RuleFor(p => p.Material, f => f.PickRandom(materials))
-                .RuleFor(p => p.WarrantyMonths, f => f.PickRandom(12, 24, 60)) // Nội thất bảo hành dài
-                .RuleFor(p => p.Status, f => "Active")
-                .RuleFor(p => p.IsFeatured, f => f.Random.Bool(0.3f))
-                .RuleFor(p => p.AverageRating, f => f.Random.Decimal(4.0m, 5.0m))
-                .RuleFor(p => p.ReviewCount, f => f.Random.Number(10, 500));
+    .RuleFor(p => p.CategoryId, (f, p) => (long?)f.PickRandom(categories).Id)
+    .RuleFor(p => p.ProductCode, f => f.Commerce.Ean13())
+
+    .RuleFor(p => p.ProductName, f => $"{f.PickRandom(productPrefixes)} {f.PickRandom(productStyles)}")
+
+    .RuleFor(p => p.Slug, (f, p) =>
+    {
+        var productName = p.ProductName ?? "san-pham";
+
+        return productName
+            .ToLower()
+            .Replace(" ", "-")
+            .Replace("đ", "d")
+            + "-" + f.Random.AlphaNumeric(5).ToLower();
+    })
+
+    .RuleFor(p => p.ShortDescription, (f, p) =>
+    {
+        var productName = p.ProductName ?? "Sản phẩm nội thất";
+        return $"Tuyệt tác {productName} mang đến không gian sống đẳng cấp.";
+    })
+
+    .RuleFor(p => p.Description, f => "Sản phẩm được chế tác tỉ mỉ từ những nghệ nhân hàng đầu, đảm bảo độ bền bỉ vượt thời gian và tính thẩm mỹ cao nhất cho không gian kiến trúc của bạn.")
+    .RuleFor(p => p.Material, f => f.PickRandom(materials))
+    .RuleFor(p => p.WarrantyMonths, f => f.PickRandom(12, 24, 60))
+    .RuleFor(p => p.Status, f => "Active")
+    .RuleFor(p => p.IsFeatured, f => f.Random.Bool(0.3f))
+    .RuleFor(p => p.AverageRating, f => f.Random.Decimal(4.0m, 5.0m))
+    .RuleFor(p => p.ReviewCount, f => f.Random.Number(10, 500));
 
             var products = productFaker.Generate(30);
             await context.Products.AddRangeAsync(products);
             await context.SaveChangesAsync();
 
-            // ==========================================
             // 5. SEED VARIANTS & IMAGES
-            // ==========================================
-            var variants = new List<ProductVariant>();
-            var images = new List<ProductImage>();
+        var variants = new List<ProductVariant>();
+        var images = new List<ProductImage>();
 
-            foreach (var product in products)
+        foreach (var product in products)
+        {
+            // Cần kiểm tra product không null
+            if (product == null) continue; 
+
+            // Mỗi product sẽ có từ 1-3 variants
+            var variantCount = new Random().Next(1, 4);
+            var variantFaker = new Faker<ProductVariant>("vi")
+                .RuleFor(v => v.ProductId, product.Id)
+                .RuleFor(v => v.Sku, f => $"SKU-{f.Random.AlphaNumeric(8).ToUpper()}")
+                .RuleFor(v => v.VariantName, f => f.Commerce.Color())
+                .RuleFor(v => v.Color, f => f.Commerce.Color())
+                .RuleFor(v => v.CurrentPrice, f => decimal.Parse(f.Commerce.Price(500000, 10000000, 0)))
+                .RuleFor(v => v.CompareAtPrice, (f, v) => v.CurrentPrice * f.Random.Decimal(1.1m, 1.4m))
+                .RuleFor(v => v.Status, "Active");
+
+            variants.AddRange(variantFaker.Generate(variantCount));
+
+            // Mỗi product sẽ có từ 2-4 hình ảnh
+            var imageCount = new Random().Next(2, 5);
+            var imageFaker = new Faker<ProductImage>()
+                .RuleFor(i => i.ProductId, product.Id)
+                .RuleFor(i => i.ImageUrl, f => f.Image.PicsumUrl(640, 480))
+                .RuleFor(i => i.AltText, product.ProductName ?? "Sản phẩm") // Tránh null reference ở đây
+                .RuleFor(i => i.IsMain, false);
+
+            var productImages = imageFaker.Generate(imageCount);
+            
+            // SỬA LỖI Ở ĐÂY: Dùng FirstOrDefault hoặc kiểm tra count trước khi truy cập chỉ số [0]
+            var mainImage = productImages.FirstOrDefault();
+            if (mainImage != null)
             {
-                // Mỗi product sẽ có từ 1-3 variants (Biến thể)
-                var variantCount = new Random().Next(1, 4);
-                var variantFaker = new Faker<ProductVariant>("vi")
-                    .RuleFor(v => v.ProductId, product.Id)
-                    .RuleFor(v => v.Sku, f => $"SKU-{f.Random.AlphaNumeric(8).ToUpper()}")
-                    .RuleFor(v => v.VariantName, f => f.Commerce.Color())
-                    .RuleFor(v => v.Color, f => f.Commerce.Color())
-                    .RuleFor(v => v.CurrentPrice, f => decimal.Parse(f.Commerce.Price(500000, 10000000, 0)))
-                    .RuleFor(v => v.CompareAtPrice, (f, v) => v.CurrentPrice * f.Random.Decimal(1.1m, 1.4m))
-                    .RuleFor(v => v.Status, "Active");
-
-                variants.AddRange(variantFaker.Generate(variantCount));
-
-                // Mỗi product sẽ có từ 2-4 hình ảnh
-                var imageCount = new Random().Next(2, 5);
-                var imageFaker = new Faker<ProductImage>()
-                    .RuleFor(i => i.ProductId, product.Id)
-                    .RuleFor(i => i.ImageUrl, f => f.Image.PicsumUrl(640, 480))
-                    .RuleFor(i => i.AltText, product.ProductName)
-                    .RuleFor(i => i.IsMain, false);
-
-                var productImages = imageFaker.Generate(imageCount);
-                if (productImages.Any())
-                {
-                    productImages[0].IsMain = true; // Set ảnh đầu tiên làm ảnh đại diện
-                }
-                images.AddRange(productImages);
+                mainImage.IsMain = true;
             }
+            images.AddRange(productImages);
+        }
 
-            await context.ProductVariants.AddRangeAsync(variants);
-            await context.ProductImages.AddRangeAsync(images);
-            await context.SaveChangesAsync();
+        await context.ProductVariants.AddRangeAsync(variants);
+        await context.ProductImages.AddRangeAsync(images);
+        await context.SaveChangesAsync();
         }
     }
 }

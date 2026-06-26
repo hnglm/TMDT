@@ -15,7 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ĐOẠN CODE MỚI: Ép cứng chuỗi kết nối trực tiếp không qua file appsettings.json
 builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
-    options.UseNpgsql("Host=localhost;Port=5432;Database=luxhomedb;Username=openpg;Password=12345"));
+    options.UseNpgsql("Host=localhost;Port=5432;Database=luxhomedb;Username=postgres;Password=050705"));
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -79,22 +79,19 @@ builder.Services.AddScoped<ChatUseCase>();
 builder.Services.AddScoped<ImageSearchUseCase>();
 builder.Services.AddScoped<UserUseCase>(); // Đăng ký UseCase User mới
 
-// Gộp chung chính sách CORS đồng nhất cho Frontend dễ gọi
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5173") 
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.AllowAnyOrigin() // Cho phép tất cả các nguồn
+              .AllowAnyMethod() // Cho phép tất cả các loại request (GET, POST, PUT, DELETE...)
+              .AllowAnyHeader(); // Cho phép tất cả các header
     });
 });
-
 var app = builder.Build();
 
 app.UseRouting();
-
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
 
 if (app.Environment.IsDevelopment())
 {

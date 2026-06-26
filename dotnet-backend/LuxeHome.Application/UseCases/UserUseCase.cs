@@ -117,7 +117,6 @@ namespace LuxeHome.Application.UseCases
             };
         }
 
-        // 👑 HÀM ĐƯỢC CẬP NHẬT: ĐỒNG BỘ DỮ LIỆU SỬA TỪ KHÁCH XUỐNG THẲNG POSTGRESQL KHI ẤN NÚT LƯU HỒ SƠ
         public async Task<UserProfileResponse> UpdateProfileAsync(long userId, UpdateProfileRequest request)
         {
             var user = await _context.Users
@@ -205,10 +204,6 @@ namespace LuxeHome.Application.UseCases
             return tokenHandler.WriteToken(token);
         }
 
-        // =========================================================================
-        // 👑 ĐOẠN CODE QUẢN TRỊ VIÊN
-        // =========================================================================
-
         public async Task<List<UserResponse>> GetAllUsersAsync()
         {
             return await _context.Users
@@ -245,5 +240,20 @@ namespace LuxeHome.Application.UseCases
             await _context.SaveChangesAsync();
             return true;
         }
+        public Task<object> GenerateSocialLoginResponse(User user)
+{
+    var result = new
+    {
+        Id = user.Id,
+        FullName = user.FullName,
+        Email = user.Email,
+        Phone = user.Phone,
+        AvatarUrl = user.AvatarUrl,
+        Status = user.Status,
+        Token = ""
+    };
+
+    return Task.FromResult<object>(result);
+}
     }
 }
