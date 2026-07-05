@@ -184,7 +184,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/products")
+    fetch("http://localhost:5200/api/products")
       .then(res => {
         if (!res.ok) throw new Error("Cổng API Backend từ chối kết nối");
         return res.json();
@@ -370,7 +370,7 @@ export default function App() {
         initialStock: newProd.stock
       };
   
-      const response = await fetch("/api/products", {
+      const response = await fetch("http://localhost:5200/api/products", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -412,7 +412,7 @@ export default function App() {
     const isConfirmed = window.confirm("Anh/Chị có chắc chắn muốn ngừng kinh doanh sản phẩm này?");
     if (!isConfirmed) return;
     try {
-      const response = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+      const response = await fetch(`http://localhost:5200/api/products/${productId}`, { method: 'DELETE' });
       if (!response.ok) throw new Error("Xóa sản phẩm thất bại.");
       setProducts((prev) => prev.filter((p) => p.id !== productId));
       alert("Đã gỡ sản phẩm khỏi Showcase!");
@@ -421,9 +421,36 @@ export default function App() {
     }
   };
 
+  const handleEditProduct = async (updatedProduct: Product) => {
+    try {
+      // Gọi API gửi dữ liệu xuống Backend
+      const response = await fetch(`http://localhost:5200/api/products/${updatedProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          productName: updatedProduct.name,
+          categorySlug: updatedProduct.category,
+          currentPrice: updatedProduct.price,
+          stock: updatedProduct.stock,
+          style: updatedProduct.style,
+          material: updatedProduct.material
+        }),
+      });
+
+      if (!response.ok) throw new Error("Cập nhật sản phẩm thất bại trên Server.");
+
+      // Cập nhật mượt mà UI không cần reload trang
+      setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
+      alert("Đã lưu thay đổi thông tin sản phẩm thành công!");
+    } catch (error) {
+      console.error(error);
+      alert("Đã xảy ra lỗi khi lưu chỉnh sửa.");
+    }
+  };
+
   const handleUpdateProductStock = async (productId: string, newStock: number) => {
     try {
-      const response = await fetch(`/api/products/${productId}/stock`, {
+      const response = await fetch(`http://localhost:5200/api/products/${productId}/stock`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newStock),
@@ -541,6 +568,7 @@ export default function App() {
               onUpdateProductStock={handleUpdateProductStock}
               onAddProduct={handleAddProductToInventory}
               onDeleteProduct={handleDeleteProduct}
+              onEditProduct={handleEditProduct}
               onUpdateScheduleStatus={handleUpdateScheduleStatus}
               onAddCoupon={handleAddNewCoupon}
             />
@@ -572,7 +600,6 @@ export default function App() {
             <ul className="text-[11px] text-[#8B7E74] space-y-1"><li>✓ Bảo hành khung mộc 10 năm</li></ul>
           </div>
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase text-[#D4AF37]">Đồ Án Môn Học</h4>
             <span className="text-[10px] text-[#D4AF37] font-semibold block">® LuxeHome TMĐT All rights reserved.</span>
           </div>
         </div>

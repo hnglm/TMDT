@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace LuxeHome.Domain.Entities;
 
@@ -10,6 +11,9 @@ public partial class Product
     public string? ProductCode { get; set; }
 
     public string? ProductName { get; set; }
+
+    [Column("brand")]
+    public string? Brand { get; set; }
 
     public string? Slug { get; set; }
 

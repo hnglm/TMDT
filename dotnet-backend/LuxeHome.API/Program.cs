@@ -13,11 +13,17 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ĐOẠN CODE MỚI: Ép cứng chuỗi kết nối trực tiếp không qua file appsettings.json
-builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
-    options.UseNpgsql("Host=localhost;Port=5432;Database=luxhomedb;Username=postgres;Password=050705"));
+var apiFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "LuxeHome.API");
+builder.Configuration.SetBasePath(apiFolderPath)
+                     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                     .AddEnvironmentVariables();
 
-builder.Services.AddEndpointsApiExplorer();
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
+{
+    options.UseNpgsql(connectionString);
+});
 
 // Cấu hình Swagger hỗ trợ nhập Token JWT khi test API
 builder.Services.AddSwaggerGen(c =>

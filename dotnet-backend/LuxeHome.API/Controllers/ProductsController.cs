@@ -121,7 +121,7 @@ public class ProductsController : ControllerBase
                     _context.InventoryStocks.Add(new InventoryStock
                     {
                         ProductId = product.Id, // Khóa ngoại 1 
-                        VariantId = variant.Id, // Khóa ngoại 2 
+                        VariantId = variant.Id, // Khóa ngoại 2  
                         QuantityAvailable = stockPerVariant,
                         QuantityOnHand = stockPerVariant,
                         QuantityReserved = 0,
@@ -227,6 +227,65 @@ public class ProductsController : ControllerBase
         catch (Exception ex)
         {
             return StatusCode(500, $"Lỗi cập nhật tồn kho: {ex.Message}");
+        }
+    }
+
+    // 5. Cập nhật thông tin Sản phẩm (Sửa sản phẩm)
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateProduct(long id, [FromBody] UpdateProductDto dto)
+    {
+        using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            // 1. Tìm sản phẩm
+            var product = await _context.Products
+                .Include(p => p.ProductVariants)
+                .Include(p => p.Category)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null) return NotFound("Không tìm thấy sản phẩm.");
+
+            // 2. Tìm Category mới nếu có thay đổi
+            if (!string.IsNullOrEmpty(dto.CategorySlug) && (product.Category == null || product.Category.Slug != dto.CategorySlug))
+            {
+                var newCategory = await _context.Categories.FirstOrDefaultAsync(c => c.Slug == dto.CategorySlug);
+                if (newCategory != null)
+                {
+                    product.CategoryId = newCategory.Id;
+                }
+            }
+
+            // 3. Cập nhật thông tin cơ bản
+            product.ProductName = dto.ProductName;
+            product.Style = dto.Style;
+            product.Material = dto.Material;
+
+            // 4. Cập nhật Giá cho Variant đầu tiên (hoặc tất cả nếu muốn)
+            if (product.ProductVariants != null && product.ProductVariants.Any())
+            {
+                var firstVariant = product.ProductVariants.First();
+                firstVariant.CurrentPrice = dto.CurrentPrice;
+            }
+
+            // 5. Cập nhật Tồn kho
+            var stockRecord = await _context.InventoryStocks.FirstOrDefaultAsync(i => i.ProductId == id);
+            if (stockRecord != null)
+            {
+                stockRecord.QuantityAvailable = dto.Stock;
+                stockRecord.QuantityOnHand = dto.Stock;
+                stockRecord.UpdatedAt = DateTime.UtcNow;
+            }
+
+            // 6. Lưu và Commit
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new { message = "Cập nhật sản phẩm thành công." });
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, $"Lỗi server khi cập nhật sản phẩm: {ex.Message}");
         }
     }
 }

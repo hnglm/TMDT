@@ -1,10 +1,5 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useMemo, useEffect } from "react";
-import { BarChart3, Package, ShoppingCart, Users, MessageSquare, Tag, Calendar, Sparkles, TrendingUp, DollarSign, Plus, Check, Edit3, Trash2, AlertTriangle, RefreshCw, UserCheck, ShieldAlert, X, Lock } from "lucide-react";
+import { BarChart3, Package, ShoppingCart, Users, MessageSquare, Tag, Calendar, Sparkles, TrendingUp, DollarSign, Plus, Check, Edit3, Trash2, AlertTriangle, RefreshCw, UserCheck, ShieldAlert, X, Lock, Save } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Product, Order, ConsultationSchedule, Coupon, BlogPost, Review } from "../types";
 
@@ -18,6 +13,7 @@ interface AdminPanelProps {
   onUpdateProductStock: (productId: string, newStock: number) => void;
   onAddProduct: (product: Product) => void;
   onDeleteProduct: (productId: string) => void;
+  onEditProduct: (product: Product) => void; // 👑 MỚI: Prop xử lý lưu sản phẩm sau khi sửa
   onUpdateScheduleStatus: (scheduleId: string, status: ConsultationSchedule["status"]) => void;
   onAddCoupon: (coupon: Coupon) => void;
 }
@@ -42,6 +38,7 @@ export default function AdminPanel({
   onUpdateProductStock,
   onAddProduct,
   onDeleteProduct,
+  onEditProduct,
   onUpdateScheduleStatus,
   onAddCoupon,
 }: AdminPanelProps) {
@@ -55,12 +52,39 @@ export default function AdminPanel({
   const [loadingUsers, setLoadingLoadingUsers] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>("All");
 
-  // 👑 STATE QUẢN LÝ POPUP FORM CHỈNH SỬA USER
   const [editingUser, setEditingUser] = useState<DBUser | null>(null);
   const [editFullName, setEditFullName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editRoleCode, setEditRoleCode] = useState("");
   const [editStatus, setEditStatus] = useState("");
+
+  // State quản lý việc hiển thị Form thêm sản phẩm
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  
+  // States cho Form Thêm
+  const [newProdName, setNewProdName] = useState("");
+  const [newProdPrice, setNewProdPrice] = useState(15000000);
+  const [newProdCategory, setNewProdCategory] = useState<Product["category"]>("phong-khach");
+  const [newProdStyle, setNewProdStyle] = useState<Product["style"]>("Modern");
+  const [newProdDescription, setNewProdDescription] = useState("");
+  const [newProdStock, setNewProdStock] = useState(10);
+  const [newProdMaterial, setNewProdMaterial] = useState("Gỗ Óc Chó sấy cao cấp");
+  const [newProdDimensions, setNewProdDimensions] = useState("Dài 180cm x Rộng 80cm");
+
+  // State quản lý Popup Sửa sản phẩm
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProdName, setEditProdName] = useState("");
+  const [editProdPrice, setEditProdPrice] = useState(0);
+  const [editProdCategory, setEditProdCategory] = useState<string>("phong-khach");
+  const [editProdStyle, setEditProdStyle] = useState<string>("Modern");
+  const [editProdMaterial, setEditProdMaterial] = useState("");
+  const [editProdStock, setEditProdStock] = useState(0);
+
+
+  const [newCoupCode, setNewCoupCode] = useState("");
+  const [newCoupValue, setNewCoupValue] = useState(15);
+  const [newCoupMin, setNewCoupMin] = useState(10000000);
+  const [newCoupType, setNewCoupType] = useState<"percent" | "fixed">("percent");
 
   const totalRevenue = useMemo(() => {
     return orders
@@ -68,121 +92,6 @@ export default function AdminPanel({
       .reduce((sum, o) => sum + o.totalAmount, 0);
   }, [orders]);
 
-  // Hàm bốc danh sách tài khoản từ .NET
-  const fetchAllUsersFromDb = async () => {
-    setLoadingLoadingUsers(true);
-    try {
-      const response = await fetch("http://localhost:5200/api/admin/users", {
-        method: "GET",
-        headers: {
-          // 👑 ĐÃ ĐỒNG BỘ SESSIONSTORAGE ĐỂ THÔNG ĐƯỜNG TRUYỀN API REAL-TIME:
-          "Authorization": `Bearer ${sessionStorage.getItem("token")}`, 
-          "Content-Type": "application/json"
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setDbUsers(data);
-      } else {
-        setDbUsers([
-          { id: 1, fullName: "Nguyen Van Admin", email: "admin@luxehome.vn", phone: "0901000001", roleCode: "ADMIN", createdAt: "2026-01-10", status: "ACTIVE" },
-          { id: 2, fullName: "Tran Thi Manager", email: "manager@example.com", phone: "0901000002", roleCode: "MANAGER", createdAt: "2026-01-15", status: "ACTIVE" },
-          { id: 3, fullName: "Le Van Staff", email: "staff@example.com", phone: "0901000003", roleCode: "STAFF", createdAt: "2026-02-01", status: "ACTIVE" },
-          { id: 4, fullName: "Lê Thành Long", email: "lamlam548818@gmail.com", phone: "0901234567", roleCode: "CUSTOMER", createdAt: "2026-06-20", status: "ACTIVE" }
-        ]);
-      }
-    } catch (error) {
-      console.error("Lỗi kết nối API lấy Users:", error);
-    } finally {
-      setLoadingLoadingUsers(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeSubTab === "users") {
-      fetchAllUsersFromDb();
-    }
-  }, [activeSubTab]);
-
-  // Hàm xử lý kích hoạt mở Popup Form điền sẵn thông tin
-  const openEditModal = (user: DBUser) => {
-    setEditingUser(user);
-    setEditFullName(user.fullName);
-    setEditPhone(user.phone || "");
-    setEditRoleCode(user.roleCode);
-    setEditStatus(user.status || "ACTIVE");
-  };
-
-  // Hàm gọi API lưu thông tin từ Form Popup xuống thẳng .NET và cập nhật UI
-  const handleSaveUserFromModal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-
-    try {
-      const response = await fetch(`http://localhost:5200/api/admin/users/${editingUser.id}/role`, {
-        method: "PUT",
-        headers: {
-          // 👑 CHÍNH XÁC: Đổi từ localStorage sang sessionStorage để thông ống xác thực
-          "Authorization": `Bearer ${sessionStorage.getItem("token")}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          roleCode: editRoleCode,
-          fullName: editFullName,
-          phone: editPhone,
-          status: editStatus
-        })
-      });
-
-      if (response.ok) {
-        // Cập nhật ngay lập tức trên UI mượt mà
-        setDbUsers(prev => prev.map(u => u.id === editingUser.id ? { 
-          ...u, 
-          roleCode: editRoleCode, 
-          fullName: editFullName, 
-          phone: editPhone, 
-          status: editStatus 
-        } : u));
-        
-        setEditingUser(null); // Đóng modal
-        alert("Đã lưu thông tin tài khoản thành công lên hệ thống!");
-      } else {
-        alert("Không thể lưu thông tin. Hãy kiểm tra lại Backend.");
-      }
-    } catch (error) {
-      console.error("Lỗi lưu dữ liệu:", error);
-      alert("Kết nối API thất bại.");
-    }
-  };
-
-  // Hàm đổi nhanh trạng thái Khóa/Mở Khóa ngoài bảng danh sách
-  const handleToggleStatus = async (userId: number, user: DBUser, nextStatus: string) => {
-    try {
-      const response = await fetch(`http://localhost:5200/api/admin/users/${userId}/role`, {
-        method: "PUT",
-        headers: {
-          // 👑 CHÍNH XÁC: Đổi từ localStorage sang sessionStorage để lệnh Khóa nhanh ăn tiền
-          "Authorization": `Bearer ${sessionStorage.getItem("token")}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ 
-          roleCode: user.roleCode,
-          fullName: user.fullName,
-          phone: user.phone,
-          status: nextStatus
-        })
-      });
-
-      if (response.ok) {
-        setDbUsers(prev => prev.map(u => u.id === userId ? { ...u, status: nextStatus } : u));
-        alert(`Đã cập nhật trạng thái tài khoản thành ${nextStatus} thành công!`);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  // Derive dynamic stats
   const ordersInSelectedMonth = useMemo(() => {
     if (selectedMonth === "All") return orders;
     return orders.filter(o => {
@@ -226,31 +135,166 @@ export default function AdminPanel({
     ];
   }, [orders]);
 
-  const [newProdName, setNewProdName] = useState("");
-  const [newProdPrice, setNewProdPrice] = useState(15000000);
-  const [newProdCategory, setNewProdCategory] = useState<Product["category"]>("phong-khach");
-  const [newProdStyle, setNewProdStyle] = useState<Product["style"]>("Modern");
-  const [newProdDescription, setNewProdDescription] = useState("");
-  const [newProdStock, setNewProdStock] = useState(10);
-  const [newProdMaterial, setNewProdMaterial] = useState("Gỗ Óc Chó sấy cao cấp");
-  const [newProdDimensions, setNewProdDimensions] = useState("Dài 180cm x Rộng 80cm");
 
-  const [newCoupCode, setNewCoupCode] = useState("");
-  const [newCoupValue, setNewCoupValue] = useState(15);
-  const [newCoupMin, setNewCoupMin] = useState(10000000);
-  const [newCoupType, setNewCoupType] = useState<"percent" | "fixed">("percent");
+  const fetchAllUsersFromDb = async () => {
+    setLoadingLoadingUsers(true);
+    try {
+      const response = await fetch("http://localhost:5200/api/admin/users", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${sessionStorage.getItem("token")}`, 
+          "Content-Type": "application/json"
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDbUsers(data);
+      } else {
+        console.warn("Không lấy được danh sách User từ Server");
+        // Không dùng hardcode, set về rỗng hoặc xử lý lỗi
+      }
+    } catch (error) {
+      console.error("Lỗi kết nối API lấy Users:", error);
+    } finally {
+      setLoadingLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === "users") {
+      fetchAllUsersFromDb();
+    }
+  }, [activeSubTab]);
+
+  const openEditModal = (user: DBUser) => {
+    setEditingUser(user);
+    setEditFullName(user.fullName);
+    setEditPhone(user.phone || "");
+    setEditRoleCode(user.roleCode);
+    setEditStatus(user.status || "ACTIVE");
+  };
+
+  const handleSaveUserFromModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      const response = await fetch(`http://localhost:5200/api/admin/users/${editingUser.id}/role`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${sessionStorage.getItem("token")}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          roleCode: editRoleCode,
+          fullName: editFullName,
+          phone: editPhone,
+          status: editStatus
+        })
+      });
+
+      if (response.ok) {
+        setDbUsers(prev => prev.map(u => u.id === editingUser.id ? { 
+          ...u, 
+          roleCode: editRoleCode, 
+          fullName: editFullName, 
+          phone: editPhone, 
+          status: editStatus 
+        } : u));
+        
+        setEditingUser(null);
+        alert("Đã lưu thông tin tài khoản thành công lên hệ thống!");
+      } else {
+        alert("Không thể lưu thông tin. Hãy kiểm tra lại Backend.");
+      }
+    } catch (error) {
+      console.error("Lỗi lưu dữ liệu:", error);
+      alert("Kết nối API thất bại.");
+    }
+  };
+
+  const handleToggleStatus = async (userId: number, user: DBUser, nextStatus: string) => {
+    try {
+      const response = await fetch(`http://localhost:5200/api/admin/users/${userId}/role`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${sessionStorage.getItem("token")}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ 
+          roleCode: user.roleCode,
+          fullName: user.fullName,
+          phone: user.phone,
+          status: nextStatus
+        })
+      });
+
+      if (response.ok) {
+        setDbUsers(prev => prev.map(u => u.id === userId ? { ...u, status: nextStatus } : u));
+        alert(`Đã cập nhật trạng thái tài khoản thành ${nextStatus} thành công!`);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handleAddNewProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onAddProduct({
-      id: "prod-" + (products.length + 1) + Math.floor(10 + Math.random() * 89),
-      name: newProdName, price: Number(newProdPrice), rating: 5, category: newProdCategory,
-      categoryName: newProdCategory === "phong-khach" ? "Phòng Khách" : "Phòng Ngủ", style: newProdStyle,
-      images: ["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800"],
-      description: newProdDescription, longDescription: "", material: newProdMaterial, dimensions: newProdDimensions,
-      colors: ["Mặc định"], features: ["Bảo hành"], warranty: "12 tháng", stock: Number(newProdStock), brand: "LuxeHome", reviews: []
+      id: "", // Sẽ được DB gán lại
+      name: newProdName, 
+      price: Number(newProdPrice), 
+      rating: 5, 
+      category: newProdCategory,
+      categoryName: newProdCategory === "phong-khach" ? "Phòng Khách" : (newProdCategory === "phong-ngu" ? "Phòng Ngủ" : "Nhà Bếp"), 
+      style: newProdStyle,
+      images: ["https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&q=80&w=800"], // Tạm thời
+      description: newProdDescription, 
+      longDescription: "", 
+      material: newProdMaterial, 
+      dimensions: newProdDimensions,
+      colors: ["Mặc định"], 
+      features: ["Bảo hành"], 
+      warranty: "12 tháng", 
+      stock: Number(newProdStock), 
+      brand: "LuxeHome", 
+      reviews: []
     });
-    setNewProdName(""); setNewProdDescription("");
+    // Reset Form
+    setNewProdName(""); 
+    setNewProdDescription("");
+    setNewProdPrice(15000000);
+    setNewProdStock(10);
+  };
+
+  const openEditProductModal = (product: Product) => {
+    setEditingProduct(product);
+    setEditProdName(product.name);
+    setEditProdPrice(product.price);
+    setEditProdCategory(product.category);
+    setEditProdStyle(product.style || "Modern");
+    setEditProdMaterial(product.material);
+    setEditProdStock(product.stock || 0);
+  };
+
+  const handleSaveProductEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    // Build the updated product object
+    const updatedProduct = {
+      ...editingProduct,
+      name: editProdName,
+      price: Number(editProdPrice),
+      category: editProdCategory as Product["category"],
+      categoryName: editProdCategory === "phong-khach" ? "Phòng Khách" : (editProdCategory === "phong-ngu" ? "Phòng Ngủ" : "Nhà Bếp"),
+      style: editProdStyle as Product["style"],
+      material: editProdMaterial,
+      stock: Number(editProdStock)
+    } as Product;
+
+    onEditProduct(updatedProduct);
+    setEditingProduct(null); // Đóng modal
   };
 
   const handleAddNewCouponSubmit = (e: React.FormEvent) => {
@@ -272,7 +316,6 @@ export default function AdminPanel({
         </div>
       </div>
 
-      {/* Thống kê thẻ */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <div className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EADBC8]">
           <span className="text-[10px] text-[#8B7E74] font-bold uppercase block">Doanh thu Đơn Hàng</span>
@@ -292,19 +335,18 @@ export default function AdminPanel({
         </div>
       </section>
 
-      {/* Tabs thanh menu */}
       <div className="flex flex-wrap gap-2 mb-8 border-b border-[#EADBC8] pb-4">
         {[
           { id: "dashboard", label: "Phân Tích Doanh Số", icon: BarChart3 },
           { id: "orders", label: "Quản Lý Đơn Hàng", icon: ShoppingCart },
-          { id: "products", label: "Kho & Sửa Sản Phẩm", icon: Package },
+          { id: "products", label: "Kho & Sản Phẩm", icon: Package },
           { id: "schedules", label: "Lịch Tư Vấn Mặt Bằng", icon: Calendar },
           { id: "coupons", label: "Mã Ưu Đãi VIP", icon: Tag },
           { id: "users", label: "Quản Lý Tài Khoản (VIP)", icon: Users },
         ].map((sub) => {
           const Icon = sub.icon;
           return (
-            <button key={sub.id} onClick={() => setActiveSubTab(sub.id as any)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold uppercase border transition-all ${activeSubTab === sub.id ? "bg-[#5C4033] text-white" : "bg-white text-[#5C4033] border-[#EADBC8]"}`}>
+            <button key={sub.id} onClick={() => setActiveSubTab(sub.id as any)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold uppercase border transition-all ${activeSubTab === sub.id ? "bg-[#5C4033] text-white" : "bg-white text-[#5C4033] border-[#EADBC8] hover:bg-[#FAF6F0]"}`}>
               <Icon className="w-4 h-4" /> {sub.label}
             </button>
           );
@@ -312,6 +354,135 @@ export default function AdminPanel({
       </div>
 
       <div className="bg-white rounded-2xl border border-[#EADBC8] p-6 md:p-8">
+        
+        {}
+        {activeSubTab === "products" && (
+          <div className="space-y-6">
+            {/* TIÊU ĐỀ & NÚT BẬT FORM THÊM MỚI */}
+            <div className="flex justify-between items-center border-b border-[#EADBC8] pb-3">
+              <h3 className="font-serif text-lg font-bold text-[#1A1A1A] flex items-center gap-2">
+                <Package className="w-5 h-5 text-[#D4AF37]" /> Quản Lý Kho & Sản Phẩm
+              </h3>
+              <button 
+                onClick={() => setIsAddingProduct(!isAddingProduct)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase transition-colors flex items-center gap-1 cursor-pointer ${isAddingProduct ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-[#5C4033] text-white hover:bg-[#4A3B32]"}`}
+              >
+                {isAddingProduct ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {isAddingProduct ? "Hủy Thêm" : "Thêm Sản Phẩm Mới"}
+              </button>
+            </div>
+
+            {/* FORM THÊM SẢN PHẨM MỚI */}
+            {isAddingProduct && (
+              <form onSubmit={handleAddNewProductSubmit} className="bg-[#FAF6F0] p-6 rounded-2xl border border-[#EADBC8] shadow-sm space-y-4 animate-in slide-in-from-top-4 duration-300">
+                <h4 className="font-bold text-[#5C4033] text-sm mb-4 uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#D4AF37]" /> Thông tin sản phẩm mới
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Tên Sản Phẩm *</label>
+                    <input type="text" required value={newProdName} onChange={(e) => setNewProdName(e.target.value)} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none" placeholder="VD: Sofa Da Cao Cấp" />
+                  </div>
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Giá Bán (VNĐ) *</label>
+                    <input type="number" required min="0" value={newProdPrice} onChange={(e) => setNewProdPrice(Number(e.target.value))} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Số Lượng Nhập Kho *</label>
+                    <input type="number" required min="0" value={newProdStock} onChange={(e) => setNewProdStock(Number(e.target.value))} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Danh Mục</label>
+                    <select value={newProdCategory} onChange={(e) => setNewProdCategory(e.target.value as any)} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none">
+                      <option value="phong-khach">Phòng Khách</option>
+                      <option value="phong-ngu">Phòng Ngủ</option>
+                      <option value="nha-bep">Nhà Bếp</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Trường Phái (Phong cách)</label>
+                    <select value={newProdStyle} onChange={(e) => setNewProdStyle(e.target.value as any)} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none">
+                      <option value="Modern">Hiện Đại (Modern)</option>
+                      <option value="Classic">Cổ Điển (Classic)</option>
+                      <option value="Indochine">Đông Dương (Indochine)</option>
+                      <option value="Rustic">Mộc mạc (Rustic)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[#8B7E74] font-bold mb-1">Chất Liệu</label>
+                    <input type="text" value={newProdMaterial} onChange={(e) => setNewProdMaterial(e.target.value)} className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl focus:ring-1 focus:ring-[#D4AF37] focus:outline-none" placeholder="VD: Gỗ Sồi Nga" />
+                  </div>
+                </div>
+                
+                <div className="pt-2 flex justify-end">
+                  <button type="submit" className="px-6 py-2.5 bg-[#D4AF37] hover:bg-[#B8962E] text-white font-bold rounded-xl text-xs uppercase shadow-md transition-colors flex items-center gap-1 cursor-pointer">
+                    <Check className="w-4 h-4" /> Đăng Sản Phẩm Lên Database
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* DANH SÁCH SẢN PHẨM HIỆN TẠI (Lấy từ props products) */}
+            {products.length === 0 ? (
+              <div className="py-20 text-center text-xs text-[#8B7E74] font-medium border border-dashed border-[#EADBC8] rounded-2xl">
+                Kho hàng đang trống. Vui lòng thêm sản phẩm mới.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {products.map(p => (
+                  <div key={p.id} className="flex flex-col p-4 border border-[#EADBC8] rounded-xl bg-white shadow-sm hover:shadow-md transition-all gap-4 relative group hover:-translate-y-1">
+                    {/* Cụm Tên và Nút chức năng */}
+                    <div className="flex justify-between items-start">
+                      <span className="font-bold text-sm text-[#1A1A1A] pr-12 line-clamp-2 leading-tight">{p.name}</span>
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => openEditProductModal(p)} 
+                          className="p-1.5 bg-amber-50 text-[#D4AF37] hover:bg-amber-100 hover:text-amber-600 rounded-lg border border-amber-200 cursor-pointer transition-colors shadow-sm"
+                          title="Sửa thông tin sản phẩm"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => onDeleteProduct(p.id)} 
+                          className="p-1.5 bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 rounded-lg border border-red-200 cursor-pointer transition-colors shadow-sm"
+                          title="Xóa sản phẩm"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Cụm Thông tin & Thẻ tag */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                       <span className="px-1.5 py-0.5 text-[9px] font-bold bg-[#FAF6F0] text-[#5C4033] rounded border border-[#EADBC8] uppercase">{p.categoryName}</span>
+                       <span className="px-1.5 py-0.5 text-[9px] font-bold bg-gray-50 text-gray-500 rounded border border-gray-200 uppercase">{p.style || "Khác"}</span>
+                    </div>
+
+                    {/* Cụm Giá & Tồn Kho */}
+                    <div className="flex items-end justify-between mt-auto pt-3 border-t border-gray-100">
+                      <div className="text-[10px] text-[#8B7E74] space-y-0.5">
+                        <p>Mã Hàng: <span className="font-mono font-bold text-gray-400">#{p.id}</span></p>
+                        <p className="font-bold text-sm text-[#5C4033]">{formattedPrice(p.price)}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="text-[9px] uppercase font-bold text-[#8B7E74]">Tồn kho</span>
+                        <input 
+                          type="number" 
+                          value={p.stock} 
+                          onChange={(e) => onUpdateProductStock(p.id, Number(e.target.value))} 
+                          className={`w-16 border text-center font-bold text-xs p-1 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#D4AF37] ${p.stock && p.stock <= 3 ? 'border-red-300 text-red-600 bg-red-50' : 'border-[#EADBC8] bg-gray-50 text-gray-700'}`} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {}
         {activeSubTab === "dashboard" && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -328,12 +499,6 @@ export default function AdminPanel({
           </table>
         )}
 
-        {activeSubTab === "products" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {products.map(p => <div key={p.id} className="flex justify-between p-4 border border-[#EADBC8] rounded-xl bg-white"><span className="font-bold text-xs">{p.name}</span><input type="number" value={p.stock} onChange={(e) => onUpdateProductStock(p.id, Number(e.target.value))} className="w-16 border text-center font-bold" /></div>)}
-          </div>
-        )}
-
         {activeSubTab === "schedules" && (
           <table className="w-full text-xs text-left">
             <thead><tr className="bg-[#FAF6F0]"><th className="p-3">Gia chủ</th><th className="p-3">Liên hệ</th><th className="p-3">Ngân sách</th><th className="p-3">Trạng thái</th></tr></thead>
@@ -347,85 +512,44 @@ export default function AdminPanel({
           </div>
         )}
 
-        {/* 👑 BẢNG DANH SÁCH TÀI KHOẢN Kèm ICON MỞ FORM POPUP SỬA/KHÓA */}
+        {/* BẢNG DANH SÁCH TÀI KHOẢN */}
         {activeSubTab === "users" && (
           <div className="space-y-6">
             <div className="flex justify-between items-center border-b border-[#EADBC8] pb-3">
               <div>
                 <h3 className="font-serif text-lg font-bold text-[#1A1A1A] flex items-center gap-2">
-                  <Users className="w-5 h-5 text-[#D4AF37]" /> Quản Lý Danh Sách Thành Viên VIP & Ban Vận Hành
+                  <Users className="w-5 h-5 text-[#D4AF37]" /> Quản Lý Danh Sách Thành Viên
                 </h3>
-                <p className="text-xs text-[#8B7E74]">Bấm vào biểu tượng cây bút để mở Form Popup chỉnh sửa thông tin cá nhân và nhóm quyền lợi.</p>
               </div>
               <button onClick={fetchAllUsersFromDb} className="p-2 hover:bg-[#FAF6F0] rounded-xl border border-[#EADBC8] flex items-center gap-1.5 text-xs font-bold text-[#5C4033] transition-all cursor-pointer">
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingUsers ? 'animate-spin' : ''}`} /> Làm mới dữ liệu real-time
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingUsers ? 'animate-spin' : ''}`} /> Lấy dữ liệu mới nhất
               </button>
             </div>
 
             {loadingUsers ? (
-              <div className="py-20 text-center text-xs text-[#8B7E74] font-medium animate-pulse">🔄 Đang cập nhật dữ liệu...</div>
+              <div className="py-20 text-center text-xs text-[#8B7E74] font-medium animate-pulse">🔄 Đang tải từ CSDL...</div>
             ) : (
               <div className="overflow-x-auto border border-[#EADBC8] rounded-xl bg-white shadow-sm">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-[#FAF6F0] text-[#5C4033] font-bold text-[10px] uppercase border-b border-[#EADBC8]">
-                    <tr>
-                      <th className="p-3.5 text-center">ID</th>
-                      <th className="p-3.5">Họ Tên Gia Chủ</th>
-                      <th className="p-3.5">Địa Chỉ Email</th>
-                      <th className="p-3.5">Số Điện Thoại</th>
-                      <th className="p-3.5 text-center">Trạng Ngưỡng</th>
-                      <th className="p-3.5 text-center">Chức Vụ</th>
-                      <th className="p-3.5 text-center">Hành Động</th>
-                    </tr>
+                    <tr><th className="p-3.5 text-center">ID</th><th className="p-3.5">Họ Tên</th><th className="p-3.5">Email</th><th className="p-3.5 text-center">Trạng Thái</th><th className="p-3.5 text-center">Hành Động</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-[#EADBC8]/40 font-medium text-[#1A1A1A]">
+                  <tbody className="divide-y divide-[#EADBC8]/40">
                     {dbUsers.map((user) => {
                       const isSystemAdmin = user.email === 'admin@luxehome.vn';
-                      const currentStatus = user.status || "ACTIVE";
-
                       return (
-                        <tr key={user.id} className="hover:bg-[#FAF6F0]/20 transition-colors">
-                          <td className="p-3.5 text-center font-mono font-bold text-gray-400">#{user.id}</td>
-                          <td className="p-3.5 font-bold text-gray-900">{user.fullName}</td>
-                          <td className="p-3.5 font-semibold text-gray-700 underline">{user.email}</td>
-                          <td className="p-3.5 font-mono text-gray-600">{user.phone || "Chưa cập nhật"}</td>
+                        <tr key={user.id} className="hover:bg-[#FAF6F0]/20">
+                          <td className="p-3.5 text-center font-mono text-gray-400">#{user.id}</td>
+                          <td className="p-3.5 font-bold">{user.fullName}</td>
+                          <td className="p-3.5 text-gray-600">{user.email}</td>
                           <td className="p-3.5 text-center">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-wider border ${currentStatus === "ACTIVE" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"}`}>
-                              {currentStatus}
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${user.status === "ACTIVE" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"}`}>
+                              {user.status || "ACTIVE"}
                             </span>
                           </td>
                           <td className="p-3.5 text-center">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${user.roleCode === "ADMIN" ? "bg-red-50 text-red-700" : "bg-[#FAF6F0] text-[#5C4033]"}`}>
-                              {user.roleCode}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-center flex items-center justify-center gap-2">
-                            {isSystemAdmin ? (
-                              <span className="text-[10px] text-gray-400 italic flex items-center gap-1"><Lock className="w-3 h-3" /> Hệ thống</span>
-                            ) : (
-                              <>
-                                {/* ICON BẤM SỬA DI ĐỘNG BẬT MODAL POPUP */}
-                                <button 
-                                  onClick={() => openEditModal(user)}
-                                  className="p-1.5 bg-amber-50 text-[#D4AF37] hover:bg-amber-100 rounded-lg border border-amber-200 transition-all cursor-pointer"
-                                  title="Chỉnh sửa thông tin thành viên"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    const nextStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-                                    if (window.confirm(`Đổi trạng thái của [${user.fullName}] sang ${nextStatus}?`)) {
-                                      // 👑 ĐÃ SỬA: Truyền đủ 3 tham số để hàm gọi chạy chuẩn xác dưới C#
-                                      handleToggleStatus(user.id, user, nextStatus);
-                                    }
-                                  }}
-                                  className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${currentStatus === "ACTIVE" ? "bg-red-50 text-red-600 border-red-100 hover:bg-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100 hover:bg-emerald-100"}`}
-                                >
-                                  {currentStatus === "ACTIVE" ? "Khóa" : "Mở Khóa"}
-                                </button>
-                              </>
+                            {isSystemAdmin ? <span className="text-[10px] text-gray-400">Hệ thống</span> : (
+                              <button onClick={() => openEditModal(user)} className="p-1.5 text-amber-600 border border-amber-200 rounded">Sửa</button>
                             )}
                           </td>
                         </tr>
@@ -439,116 +563,85 @@ export default function AdminPanel({
         )}
       </div>
 
-      {/* 👑 COMPONENT MODAL POPUP: FORM CHỈNH SỬA TÀI KHOẢN CAO CẤP */}
-      {editingUser && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-55 flex items-center justify-center p-4">
-          <div className="bg-[#FAF6F0] w-full max-w-md rounded-2xl border border-[#EADBC8] shadow-2xl p-6 relative animate-scaleUp">
+      {}
+      {/* MODAL POPUP: FORM CHỈNH SỬA SẢN PHẨM */}
+      {editingProduct && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-[#FAF6F0] w-full max-w-2xl rounded-2xl border border-[#D4AF37] shadow-2xl p-6 md:p-8 relative animate-in zoom-in-95 duration-200">
             
-            {/* Nút đóng modal */}
-            <button 
-              onClick={() => setEditingUser(null)} 
-              className="absolute top-4 right-4 text-[#8B7E74] hover:text-[#5C4033] p-1.5 rounded-full hover:bg-[#F4EBE1]"
-            >
-              <X className="w-5 h-5" />
+            <button onClick={() => setEditingProduct(null)} className="absolute top-4 right-4 text-[#8B7E74] hover:text-[#1A1A1A] p-1.5 rounded-full hover:bg-gray-200 transition-colors">
+              <X className="w-6 h-6" />
             </button>
 
-            {/* Header popup */}
-            <div className="text-center mb-5 border-b border-[#EADBC8] pb-3">
-              <h3 className="font-serif text-lg font-bold text-[#1A1A1A] flex items-center justify-center gap-1.5">
-                <Edit3 className="w-5 h-5 text-[#D4AF37]" /> Cập Nhật Hồ Sơ Gia Chủ
+            <div className="text-center mb-6 border-b border-[#EADBC8] pb-4">
+              <h3 className="font-serif text-xl font-bold text-[#1A1A1A] flex items-center justify-center gap-2">
+                <Edit3 className="w-5 h-5 text-[#D4AF37]" /> Cập Nhật Thông Tin Sản Phẩm
               </h3>
-              <p className="text-[11px] text-[#8B7E74] mt-0.5">ID Người Dùng Đang Chọn: #{editingUser.id}</p>
+              <p className="text-xs text-[#8B7E74] mt-1 font-mono">ID: #{editingProduct.id}</p>
             </div>
 
-            {/* Form nội dung */}
-            <form onSubmit={handleSaveUserFromModal} className="space-y-4 text-xs">
-              
-              {/* Mục Email: BỊ BLOCK (Chỉ hiển thị chứ không cho chỉnh sửa) */}
-              <div>
-                <label className="block text-[10px] text-[#8B7E74] uppercase font-bold mb-1 flex items-center gap-1">
-                  📧 Địa Chỉ Email Đăng Nhập <span className="text-[9px] text-red-500 italic font-normal">(Cố định hệ thống)</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={editingUser.email}
-                    disabled
-                    className="w-full bg-gray-200/60 text-gray-500 border border-[#EADBC8] p-2.5 rounded-xl font-semibold cursor-not-allowed focus:outline-none"
-                  />
-                  <Lock className="w-3.5 h-3.5 text-gray-400 absolute right-3 top-3" />
+            <form onSubmit={handleSaveProductEdit} className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-[#5C4033] uppercase font-bold mb-1">Tên Sản Phẩm *</label>
+                  <input type="text" required value={editProdName} onChange={(e) => setEditProdName(e.target.value)} className="w-full border border-[#EADBC8] p-3 rounded-xl focus:ring-2 focus:ring-[#D4AF37] focus:outline-none" />
                 </div>
-              </div>
-
-              {/* Mục Tên: ĐƯỢC CHỈNH SỬA */}
-              <div>
-                <label className="block text-[10px] text-[#5C4033] uppercase font-bold mb-1">👤 Họ tên gia chủ *</label>
-                <input
-                  type="text"
-                  required
-                  value={editFullName}
-                  onChange={(e) => setEditFullName(e.target.value)}
-                  className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                />
-              </div>
-
-              {/* Mục Số điện thoại: ĐƯỢC CHỈNH SỬA */}
-              <div>
-                <label className="block text-[10px] text-[#5C4033] uppercase font-bold mb-1">📞 Số điện thoại liên hệ *</label>
-                <input
-                  type="text"
-                  required
-                  value={editPhone}
-                  onChange={(e) => setEditPhone(e.target.value)}
-                  className="w-full bg-white border border-[#EADBC8] p-2.5 rounded-xl text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-                />
-              </div>
-
-              {/* Mục Chức Vụ: ĐƯỢC CHỈNH SỬA CHỌN */}
-              <div className="grid grid-cols-2 gap-4">
+                
                 <div>
-                  <label className="block text-[10px] text-[#5C4033] uppercase font-bold mb-1">🎖️ Cấp quyền</label>
-                  <select
-                    value={editRoleCode}
-                    onChange={(e) => setEditRoleCode(e.target.value)}
-                    className="w-full bg-white border border-[#EADBC8] p-2 rounded-xl text-gray-900 font-bold focus:outline-none"
-                  >
-                    <option value="CUSTOMER">CUSTOMER</option>
-                    <option value="STAFF">STAFF</option>
-                    <option value="MANAGER">MANAGER</option>
-                    <option value="ADMIN">ADMIN</option>
+                  <label className="block text-xs text-[#5C4033] uppercase font-bold mb-1">Giá Bán Cập Nhật *</label>
+                  <div className="relative">
+                    <input type="number" required min="0" value={editProdPrice} onChange={(e) => setEditProdPrice(Number(e.target.value))} className="w-full border border-[#EADBC8] p-3 rounded-xl focus:ring-2 focus:ring-[#D4AF37] pl-8 font-bold" />
+                    <DollarSign className="w-4 h-4 absolute left-3 top-3.5 text-gray-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-[#5C4033] uppercase font-bold mb-1">Số Lượng Tồn Kho Thực *</label>
+                  <div className="relative">
+                    <input type="number" required min="0" value={editProdStock} onChange={(e) => setEditProdStock(Number(e.target.value))} className="w-full border border-[#EADBC8] p-3 rounded-xl focus:ring-2 focus:ring-[#D4AF37] pl-8 font-bold" />
+                    <Package className="w-4 h-4 absolute left-3 top-3.5 text-gray-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-[#5C4033] uppercase font-bold mb-1">Thuộc Danh Mục</label>
+                  <select value={editProdCategory} onChange={(e) => setEditProdCategory(e.target.value)} className="w-full border border-[#EADBC8] p-3 rounded-xl focus:ring-2 focus:ring-[#D4AF37]">
+                    <option value="phong-khach">Phòng Khách</option>
+                    <option value="phong-ngu">Phòng Ngủ</option>
+                    <option value="nha-bep">Nhà Bếp</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-[#5C4033] uppercase font-bold mb-1">⚡ Vận hành</label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full bg-white border border-[#EADBC8] p-2 rounded-xl text-gray-900 font-bold focus:outline-none"
-                  >
-                    <option value="ACTIVE">ACTIVE (Mở)</option>
-                    <option value="INACTIVE">INACTIVE (Khóa)</option>
-                  </select>
+                  <label className="block text-xs text-[#5C4033] uppercase font-bold mb-1">Chất Liệu Chính</label>
+                  <input type="text" value={editProdMaterial} onChange={(e) => setEditProdMaterial(e.target.value)} className="w-full border border-[#EADBC8] p-3 rounded-xl focus:ring-2 focus:ring-[#D4AF37]" />
                 </div>
               </div>
 
-              {/* Hộp nút bấm hành động */}
-              <div className="pt-4 flex justify-end gap-2 border-t border-[#EADBC8] mt-6">
-                <button
-                  type="button"
-                  onClick={() => setEditingUser(null)}
-                  className="px-4 py-2.5 rounded-xl border border-[#EADBC8] text-gray-600 hover:bg-gray-100 font-bold uppercase tracking-wider cursor-pointer"
-                >
-                  Hủy bỏ
+              <div className="pt-6 mt-6 flex justify-end gap-3 border-t border-[#EADBC8]">
+                <button type="button" onClick={() => setEditingProduct(null)} className="px-5 py-2.5 rounded-xl border border-[#EADBC8] text-gray-700 font-bold uppercase text-xs hover:bg-gray-100 transition-colors">
+                  Hủy Bỏ
                 </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#5C4033] hover:bg-[#4A3B32] text-white font-bold uppercase tracking-wider shadow-md transition-all cursor-pointer flex items-center gap-1"
-                >
-                  <Check className="w-4 h-4 text-[#D4AF37]" /> Lưu thay đổi
+                <button type="submit" className="px-6 py-2.5 rounded-xl bg-[#5C4033] hover:bg-[#4A3B32] text-white font-bold uppercase text-xs flex items-center gap-2 shadow-lg transition-all transform hover:scale-105">
+                  <Save className="w-4 h-4 text-[#D4AF37]" /> Lưu Thay Đổi
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
 
+      {/* MODAL EDIT USER */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-55 flex items-center justify-center p-4">
+          <div className="bg-[#FAF6F0] w-full max-w-md rounded-2xl border border-[#EADBC8] shadow-2xl p-6 relative">
+            <button onClick={() => setEditingUser(null)} className="absolute top-4 right-4 text-[#8B7E74]"><X className="w-5 h-5" /></button>
+            <form onSubmit={handleSaveUserFromModal} className="space-y-4 text-xs mt-6">
+              <div>
+                <label className="block text-[#5C4033] font-bold">Họ tên *</label>
+                <input type="text" value={editFullName} onChange={(e) => setEditFullName(e.target.value)} className="w-full border p-2 rounded" />
+              </div>
+              <div className="flex justify-end pt-4"><button type="submit" className="px-4 py-2 bg-[#5C4033] text-white rounded font-bold">Lưu thay đổi</button></div>
             </form>
           </div>
         </div>
