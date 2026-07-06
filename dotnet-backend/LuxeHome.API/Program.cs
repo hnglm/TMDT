@@ -8,6 +8,9 @@ using Microsoft.OpenApi.Models;
 using LuxeHome.Infrastructure.Data;
 using LuxeHome.Infrastructure.Services;
 using LuxeHome.Application.UseCases;
+using LuxeHome.Application.Jobs;
+using Hangfire;
+using Hangfire.PostgreSql;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
@@ -24,6 +27,19 @@ builder.Services.AddDbContext<LuxeHomeDbContext>(options =>
 {
     options.UseNpgsql(connectionString);
 });
+
+// 1. Đăng ký Hangfire
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(connectionString)); // Lưu queue vào PostgreSQL
+
+// 2. Khởi động Hangfire Server chạy ngầm
+builder.Services.AddHangfireServer();
+
+// 3. Đăng ký Job của chúng ta
+builder.Services.AddScoped<IPriceUpdateJob, PriceUpdateJob>();
 
 // Cấu hình Swagger hỗ trợ nhập Token JWT khi test API
 builder.Services.AddSwaggerGen(c =>
@@ -114,7 +130,7 @@ app.UseSwaggerUI(c =>
 // Kích hoạt Authentication trước Authorization
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseHangfireDashboard("/hangfire");
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())

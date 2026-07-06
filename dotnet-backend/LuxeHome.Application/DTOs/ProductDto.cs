@@ -11,6 +11,9 @@ namespace LuxeHome.Application.DTOs
         public string Material { get; set; }
         public int? WarrantyMonths { get; set; }
         
+        public string? Status { get; set; }
+        public string? MetaTitle { get; set; }
+        public string? MetaDescription { get; set; }
         // Gộp thông tin Category
         public CategoryInfoDto Category { get; set; }
         
@@ -36,5 +39,7 @@ namespace LuxeHome.Application.DTOs
     {
         public decimal? CurrentPrice { get; set; }
         public string Color { get; set; }
+        public long Id { get; set; }
+        public string Sku { get; set; }
     }
 }

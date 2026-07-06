@@ -119,3 +119,36 @@ export interface Coupon {
   description: string;
   isActive: boolean;
 }
+
+export interface ProductPrice {
+  id: number;
+  productId: number;
+  variantId?: number;
+  originalPrice: number;
+  sellingPrice: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status: 'ACTIVE' | 'PENDING' | 'EXPIRED' | 'REJECTED';
+  createdBy: number;
+  approvedBy?: number;
+  // Dữ liệu include thêm từ Backend để hiển thị UI
+  variant?: {
+    variantName: string;
+    sku: string;
+    currentPrice: number;
+    product?: {
+      productName: string;
+    }
+  };
+}
+
+export interface PriceHistory {
+  id: number;
+  productId: number;
+  variantId?: number;
+  oldPrice: number;
+  newPrice: number;
+  reason: string;
+  changedBy: number;
+  changedAt: string;
+}

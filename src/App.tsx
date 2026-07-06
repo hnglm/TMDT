@@ -184,14 +184,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5200/api/products")
+    fetch("http://localhost:5200/api/products?page=1&pageSize=100") // Lấy tạm 100 SP cho Storefront
       .then(res => {
         if (!res.ok) throw new Error("Cổng API Backend từ chối kết nối");
         return res.json();
       })
       .then(data => {
-        if (data && data.length > 0) {
-          const mappedProducts = data.map((item: any) => {
+        const productList = data.items || data.Items || data; 
+        
+        if (productList && productList.length > 0) {
+          // Bước 1: Map dữ liệu thô từ Backend sang cấu trúc Frontend
+          const mappedProducts = productList.map((item: any) => {
             const mappedImages = item.productImages && item.productImages.length > 0 
               ? item.productImages.map((img: any) => img.imageUrl) 
               : ["https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=800"];
@@ -218,14 +221,21 @@ export default function App() {
               warranty: `${item.warrantyMonths || 12} tháng`,
               stock: 10,
               brand: "LuxeHome",
+              status: item.status || "ACTIVE", // Cần gán thuộc tính status
               reviews: []
             };
           });
-          setProducts(mappedProducts);
+
+          // Bước 2: Lọc sản phẩm (Chỉ giữ lại những sản phẩm ĐANG BÁN)
+          const activeProducts = mappedProducts.filter((p: any) => p.status !== "INACTIVE");
+          
+          // Bước 3: Đưa dữ liệu đã lọc vào state
+          setProducts(activeProducts);
         }
       })
       .catch(err => console.error("❌ Lỗi API:", err));
   }, []);
+
 
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -423,18 +433,28 @@ export default function App() {
 
   const handleEditProduct = async (updatedProduct: Product) => {
     try {
-      // Gọi API gửi dữ liệu xuống Backend
+      // Gọi API gửi dữ liệu xuống Backend (Đã thêm Status, MetaTitle, MetaDescription, ImageUrl)
+      const payload: any = {
+        productName: updatedProduct.name,
+        categorySlug: updatedProduct.category,
+        currentPrice: updatedProduct.price,
+        stock: updatedProduct.stock,
+        style: updatedProduct.style,
+        material: updatedProduct.material,
+        status: (updatedProduct as any).status || "ACTIVE",
+        metaTitle: (updatedProduct as any).metaTitle || "",
+        metaDescription: (updatedProduct as any).metaDescription || ""
+      };
+
+      // Gửi mảng ảnh nếu có thay đổi ảnh chính
+      if (updatedProduct.images && updatedProduct.images.length > 0) {
+        payload.imageUrl = updatedProduct.images[0];
+      }
+
       const response = await fetch(`http://localhost:5200/api/products/${updatedProduct.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productName: updatedProduct.name,
-          categorySlug: updatedProduct.category,
-          currentPrice: updatedProduct.price,
-          stock: updatedProduct.stock,
-          style: updatedProduct.style,
-          material: updatedProduct.material
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) throw new Error("Cập nhật sản phẩm thất bại trên Server.");
