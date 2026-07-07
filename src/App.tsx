@@ -58,9 +58,7 @@ export default function App() {
   const [wishlist, setWishlist] = useState<string[]>(["prod-01", "prod-03"]);
 
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
-  const savedUser =
-    sessionStorage.getItem("user") || localStorage.getItem("user");
-
+  const savedUser = sessionStorage.getItem("user");
   if (savedUser) {
     try {
       const parsed = JSON.parse(savedUser);
@@ -90,10 +88,8 @@ export default function App() {
     }
   }
 
-  const savedToken =
-    sessionStorage.getItem("token") || localStorage.getItem("token");
-  const savedRole =
-    sessionStorage.getItem("user_role") || localStorage.getItem("user_role");
+  const savedToken = sessionStorage.getItem("token");
+const savedRole = sessionStorage.getItem("user_role");
 
   if (savedToken && savedRole) {
     const isAdmin =

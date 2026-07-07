@@ -11,7 +11,7 @@ using LuxeHome.Application.UseCases;
 using LuxeHome.Application.Jobs;
 using Hangfire;
 using Hangfire.PostgreSql;
-
+using LuxeHome.Application.Services;
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -99,8 +99,8 @@ builder.Services.AddHttpClient<IAIService, GeminiAIService>();
 // Đăng ký các UseCase Nghiệp vụ
 builder.Services.AddScoped<ChatUseCase>();
 builder.Services.AddScoped<ImageSearchUseCase>();
-builder.Services.AddScoped<UserUseCase>(); // Đăng ký UseCase User mới
-
+builder.Services.AddScoped<UserUseCase>(); 
+builder.Services.AddScoped<VnPayService>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
