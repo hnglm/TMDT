@@ -141,37 +141,41 @@ namespace LuxeHome.API.Controllers
 
                 foreach (var it in dto.Items)
                 {
-                    var product = await _db.Products
-                        .Include(p => p.ProductVariants)
-                        .FirstOrDefaultAsync(p => p.Id == it.ProductId);
+                    // Query only required fields so checkout does not depend on optional product columns.
+                    var itemData = await _db.ProductVariants
+                        .Where(v => v.ProductId == it.ProductId)
+                        .OrderByDescending(v => v.Id == it.VariantId)
+                        .Select(v => new
+                        {
+                            ProductId = v.ProductId,
+                            VariantId = v.Id,
+                            ProductName = v.Product.ProductName,
+                            Sku = v.Sku,
+                            CurrentPrice = v.CurrentPrice,
+                            WarrantyMonths = v.Product.WarrantyMonths
+                        })
+                        .FirstOrDefaultAsync();
 
-                    if (product == null)
+                    if (itemData == null)
                         continue;
 
-                    // FE hiện gửi variantId = productId (chưa chuẩn), nên fallback về variant đầu tiên của SP
-                    var variant = product.ProductVariants.FirstOrDefault(v => v.Id == it.VariantId)
-                                  ?? product.ProductVariants.FirstOrDefault();
-
-                    if (variant == null)
-                        continue;
-
-                    decimal price = variant.CurrentPrice ?? 0;
+                    decimal price = itemData.CurrentPrice ?? 0;
                     int qty = it.Quantity > 0 ? it.Quantity : 1;
                     decimal lineTotal = price * qty;
                     subtotal += lineTotal;
 
                     orderItems.Add(new OrderItem
                     {
-                        ProductId = product.Id,
-                        VariantId = variant.Id,
-                        ProductName = product.ProductName,
-                        Sku = variant.Sku,
+                        ProductId = itemData.ProductId,
+                        VariantId = itemData.VariantId,
+                        ProductName = itemData.ProductName,
+                        Sku = itemData.Sku,
                         Quantity = qty,
                         OriginalPrice = price,
                         SellingPrice = price,
                         DiscountAmount = 0,
                         TotalPrice = lineTotal,
-                        WarrantyMonths = product.WarrantyMonths
+                        WarrantyMonths = itemData.WarrantyMonths
                     });
                 }
 
