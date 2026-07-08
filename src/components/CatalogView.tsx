@@ -1,9 +1,14 @@
 import React, { useState, useMemo } from "react";
-import { Search, Filter, SlidersHorizontal, Trash2, ArrowUpDown, Star, Heart, FileText, Check, AlertCircle, Scale, Eye } from "lucide-react";
+import { Search, Filter, SlidersHorizontal, Trash2, ArrowUpDown, Star, Heart, FileText, Check, AlertCircle, Scale, Eye, ChevronDown } from "lucide-react";
 import { Product } from "../types";
 
 interface CatalogViewProps {
   products: Product[];
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
   onSelectProduct: (product: Product) => void;
   onToggleWishlist: (productId: string) => void;
   wishlist: string[];
@@ -13,12 +18,20 @@ interface CatalogViewProps {
 
 export default function CatalogView({
   products,
+  currentPage,
+  totalPages,
+  totalItems,
+  isLoading,
+  onPageChange,
   onSelectProduct,
   onToggleWishlist,
   wishlist,
   initialCategory = "",
   initialStyle = "",
 }: CatalogViewProps) {
+  const selectBaseClass =
+    "w-full text-xs bg-white border border-[#EADBC8] rounded-lg text-[#1A1A1A] appearance-none pr-8 transition-colors focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/30 focus:border-[#D4AF37]";
+
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
@@ -100,6 +113,28 @@ export default function CatalogView({
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
   };
 
+  const buildPageNumbers = () => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const pages: Array<number | string> = [];
+    const start = Math.max(2, currentPage - 2);
+    const end = Math.min(totalPages - 1, currentPage + 2);
+
+    pages.push(1);
+    if (start > 2) pages.push("...");
+
+    for (let i = start; i <= end; i += 1) {
+      pages.push(i);
+    }
+
+    if (end < totalPages - 1) pages.push("...");
+    pages.push(totalPages);
+
+    return pages;
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="catalog-view-section">
       
@@ -112,7 +147,9 @@ export default function CatalogView({
           <h1 className="font-serif text-3xl font-bold text-[#1A1A1A]">
             Trưng Bày Tác Phẩm LuxeHome
           </h1>
-          <p className="text-xs text-[#8B7E74]">Hiển thị {filteredProducts.length} trên tổng số {products.length} tác phẩm</p>
+          <p className="text-xs text-[#8B7E74]">
+            Hiển thị {filteredProducts.length} sản phẩm trang {currentPage}/{totalPages} • Tổng {totalItems} sản phẩm
+          </p>
         </div>
 
         {/* Search Input Bar */}
@@ -178,17 +215,20 @@ export default function CatalogView({
           {/* Style select options */}
           <div className="space-y-2">
             <h3 className="text-xs font-semibold text-[#5C4033] uppercase tracking-wider mb-2">Trường phái Mỹ nghệ</h3>
-            <select
-              value={selectedStyle}
-              onChange={(e) => setSelectedStyle(e.target.value)}
-              className="w-full text-xs p-2.5 bg-white border border-[#EADBC8] rounded-lg text-[#1A1A1A] focus:outline-none"
-            >
-              <option value="">Tất cả phong cách</option>
-              <option value="Luxury">Luxury (Sang Trọng)</option>
-              <option value="Modern">Modern (Hiện Đại)</option>
-              <option value="Minimalist">Minimalist (Tối Giản)</option>
-              <option value="Scandinavian">Scandinavian (Bắc Âu)</option>
-            </select>
+            <div className="relative">
+              <select
+                value={selectedStyle}
+                onChange={(e) => setSelectedStyle(e.target.value)}
+                className={`${selectBaseClass} p-2.5`}
+              >
+                <option value="">Tất cả phong cách</option>
+                <option value="Luxury">Luxury (Sang Trọng)</option>
+                <option value="Modern">Modern (Hiện Đại)</option>
+                <option value="Minimalist">Minimalist (Tối Giản)</option>
+                <option value="Scandinavian">Scandinavian (Bắc Âu)</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8B7E74]" />
+            </div>
           </div>
 
           {/* Price Range Filter slider */}
@@ -285,21 +325,28 @@ export default function CatalogView({
 
             <div className="flex items-center gap-1">
               <ArrowUpDown className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="text-xs bg-white border border-[#EADBC8] p-1.5 rounded focus:outline-none"
-              >
-                <option value="rating">Được đánh giá cao</option>
-                <option value="price-asc">Giá: Thấp tới Cao</option>
-                <option value="price-desc">Giá: Cao xuống Thấp</option>
-                <option value="name">Ký tự chữ cái (A-Z)</option>
-              </select>
+              <div className="relative min-w-[180px]">
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className={`${selectBaseClass} p-1.5`}
+                >
+                  <option value="rating">Được đánh giá cao</option>
+                  <option value="price-asc">Giá: Thấp tới Cao</option>
+                  <option value="price-desc">Giá: Cao xuống Thấp</option>
+                  <option value="name">Ký tự chữ cái (A-Z)</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8B7E74]" />
+              </div>
             </div>
           </div>
 
           {/* Products List Grid */}
-          {filteredProducts.length > 0 ? (
+          {isLoading ? (
+            <div className="p-12 text-center bg-[#FAF6F0] rounded-2xl border border-dashed border-[#EADBC8]">
+              <h3 className="font-serif text-base font-bold text-[#1A1A1A]">Đang tải sản phẩm...</h3>
+            </div>
+          ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" id="catalog-products-list-grid">
               {filteredProducts.map((p) => {
                 const isCompared = comparedProducts.some((cp) => cp.id === p.id);
@@ -373,6 +420,46 @@ export default function CatalogView({
               <AlertCircle className="w-10 h-10 text-[#D4AF37] mx-auto mb-3" />
               <h3 className="font-serif text-base font-bold text-[#1A1A1A]">Không có sản phẩm nào khớp bộ lọc</h3>
               <p className="text-xs text-[#8B7E74] mt-2">Xưởng đồ mộc LuxeHome của chúng tôi liên tục biến hóa. Bạn vui lòng ấn "Xóa lọc" để xem bộ sưu tập cơ bản!</p>
+            </div>
+          )}
+
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-2 flex-wrap" id="catalog-pagination-controls">
+              <button
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage <= 1}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[#D4AF37] bg-[#FAF6F0] text-[#5C4033] hover:bg-[#F4EBE1] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FAF6F0]"
+              >
+                ← Prev
+              </button>
+
+              {buildPageNumbers().map((page, index) =>
+                page === "..." ? (
+                  <span key={`ellipsis-${index}`} className="px-2 text-sm text-[#4B5563]">
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={`page-${page}`}
+                    onClick={() => onPageChange(Number(page))}
+                    className={`w-10 h-10 text-sm rounded-lg border transition-colors ${
+                      currentPage === page
+                        ? "bg-[#5C4033] border-[#5C4033] text-white font-semibold"
+                        : "bg-white border-[#EADBC8] text-[#5C4033] hover:bg-[#FAF6F0] hover:border-[#D4AF37]"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+
+              <button
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1.5 text-xs rounded-lg border border-[#D4AF37] bg-[#FAF6F0] text-[#5C4033] hover:bg-[#F4EBE1] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FAF6F0]"
+              >
+                Next →
+              </button>
             </div>
           )}
 

@@ -84,6 +84,30 @@ export default function UserProfile({
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
   };
 
+  const formatOrderDateTime = (rawDate: string) => {
+    const date = new Date(rawDate);
+    if (Number.isNaN(date.getTime())) return "N/A";
+    return new Intl.DateTimeFormat("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Ho_Chi_Minh",
+    }).format(date);
+  };
+
+  const getOrderStatusText = (status: Order["status"]) => {
+    if (status === "pending") return "Chờ xác nhận";
+    if (status === "confirmed") return "Sẵn sàng xuất kho";
+    if (status === "shipping") return "Xe đang giao";
+    if (status === "delivered") return "Đã tới Showroom";
+    if (status === "completed") return "Hoàn tất";
+    return "Đã hủy";
+  };
+
   const handleSaveInfo = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -176,75 +200,110 @@ export default function UserProfile({
               </div>
 
               {orders.length > 0 ? (
-                <div className="space-y-8" id="orders-list-profile">
-                  {orders.map((order) => (
-                    <div key={order.id} className="border border-[#EADBC8] rounded-2xl p-5 md:p-6 bg-[#FAF6F0]/30 space-y-4">
-                      <div className="flex flex-wrap justify-between items-center bg-white p-3 rounded-lg border border-[#EADBC8] text-xs font-semibold gap-2">
-                        <div>Mã đơn hàng: <span className="font-black text-[#5C4033]">{order.id}</span></div>
-                        <div className="text-[#8B7E74]">Đặt ngày: {order.date}</div>
-                        <div className="ml-auto font-black text-[#D4AF37]">Giá trị: {formattedPrice(order.totalAmount)}</div>
-                        <div>
-                          <span className="bg-[#5C4033] text-white px-2 py-0.5 rounded text-[10px] uppercase font-bold">
-                            {order.status === "pending" ? "Chờ xác nhận" :
-                             order.status === "confirmed" ? "Sẵn sàng xuất kho" :
-                             order.status === "shipping" ? "Xe đang giao" :
-                             order.status === "delivered" ? "Đã tới Showroom" :
-                             order.status === "completed" ? "Hoàn tất" : "Đã Huỷ"}
-                          </span>
-                        </div>
-                        {order.status === "pending" && onCancelOrder && (
-                          <button 
-                            onClick={() => {
-                              if(window.confirm("Quý khách chắc chắn muốn hủy đơn hàng này?")) {
-                                onCancelOrder(order.id);
-                              }
-                            }}
-                            className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
-                          >
-                            Hủy đơn
-                          </button>
-                        )}
-                      </div>
-                
-                      <div className="space-y-2">
-                        {order.items.map((item, index) => (
-                          <div key={index} className="flex justify-between items-center text-xs p-2 bg-white rounded border border-[#EADBC8]/40">
-                            <div className="font-bold text-[#1A1A1A]">
-                              {item.name} <span className="text-[#D4AF37]">x{item.quantity}</span>
-                              <span className="block text-[10px] text-[#8B7E74] font-normal">Màu sắc: {item.color} • Vật liệu: {item.material}</span>
-                            </div>
-                            <span className="font-semibold text-[#5C4033]">{formattedPrice(item.price)}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="pt-4 border-t border-[#EADBC8]/60 space-y-3">
-                        <h4 className="text-[10px] uppercase tracking-wider font-extrabold text-[#D4AF37]">Trạng thái bám vận trình thực tế:</h4>
-                        <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
-                          {[
-                            { step: "pending", label: "Tiếp Nhận" },
-                            { step: "confirmed", label: "Chế Tác" },
-                            { step: "shipping", label: "Vận Chuyển" },
-                            { step: "completed", label: "Bàn Giao" }
-                          ].map((s) => {
-                            const statusOrder = ["pending", "confirmed", "shipping", "completed"];
-                            const currentIdx = statusOrder.indexOf(order.status);
-                            const thisIdx = statusOrder.indexOf(s.step);
-                            const isDone = thisIdx <= currentIdx && order.status !== "cancelled";
-
-                            return (
-                              <div key={s.step} className="space-y-1">
-                                <div className={`h-1.5 rounded-full ${isDone ? "bg-[#D4AF37]" : "bg-gray-200"}`} />
-                                <span className={`font-bold transition-colors ${isDone ? "text-[#5C4033]" : "text-gray-400"}`}>
-                                  {s.label}
-                                </span>
+                <div className="space-y-6" id="orders-list-profile">
+                  <div className="overflow-x-auto rounded-2xl border border-[#EADBC8]">
+                    <table className="w-full min-w-[900px] text-xs">
+                      <thead className="bg-[#FAF6F0] text-[#5C4033] uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-bold">Mã đơn</th>
+                          <th className="px-4 py-3 text-left font-bold">Đặt ngày</th>
+                          <th className="px-4 py-3 text-left font-bold">Sản phẩm</th>
+                          <th className="px-4 py-3 text-right font-bold">Giá trị</th>
+                          <th className="px-4 py-3 text-center font-bold">Thanh toán</th>
+                          <th className="px-4 py-3 text-center font-bold">Trạng thái</th>
+                          <th className="px-4 py-3 text-center font-bold">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((order) => (
+                          <tr key={order.id} className="border-t border-[#EADBC8]/70 align-top">
+                            <td className="px-4 py-4 font-black text-[#5C4033] whitespace-nowrap">{order.id}</td>
+                            <td className="px-4 py-4 text-[#8B7E74] whitespace-nowrap">{formatOrderDateTime(order.date)}</td>
+                            <td className="px-4 py-4">
+                              <div className="space-y-1.5 min-w-[260px]">
+                                {order.items.map((item, index) => (
+                                  <div key={`${order.id}-${index}`} className="rounded-lg border border-[#EADBC8]/50 bg-white px-2.5 py-2">
+                                    <p className="font-bold text-[#1A1A1A]">
+                                      {item.name} <span className="text-[#D4AF37]">x{item.quantity}</span>
+                                    </p>
+                                    <p className="text-[10px] text-[#8B7E74]">
+                                      Màu sắc: {item.color || "N/A"} • Vật liệu: {item.material || "N/A"}
+                                    </p>
+                                  </div>
+                                ))}
                               </div>
-                            );
-                          })}
+                            </td>
+                            <td className="px-4 py-4 text-right font-black text-[#D4AF37] whitespace-nowrap">
+                              {formattedPrice(order.totalAmount)}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className={`inline-flex rounded px-2 py-1 text-[10px] font-bold uppercase ${
+                                order.paymentStatus === "Đã thanh toán"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                              }`}>
+                                {order.paymentStatus}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              <span className="inline-flex bg-[#5C4033] text-white px-2 py-1 rounded text-[10px] uppercase font-bold whitespace-nowrap">
+                                {getOrderStatusText(order.status)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              {order.status === "pending" && onCancelOrder ? (
+                                <button
+                                  onClick={() => {
+                                    if(window.confirm("Quý khách chắc chắn muốn hủy đơn hàng này?")) {
+                                      onCancelOrder(order.id);
+                                    }
+                                  }}
+                                  className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
+                                >
+                                  Hủy đơn
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-[#8B7E74]">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] uppercase tracking-wider font-extrabold text-[#D4AF37]">Trạng thái bám vận trình thực tế:</h4>
+                    <div className="space-y-3">
+                      {orders.map((order) => (
+                        <div key={`timeline-${order.id}`} className="rounded-xl border border-[#EADBC8] bg-[#FAF6F0]/30 p-3">
+                          <p className="text-[11px] font-bold text-[#5C4033] mb-2">Đơn {order.id}</p>
+                          <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
+                            {[
+                              { step: "pending", label: "Tiếp Nhận" },
+                              { step: "confirmed", label: "Chế Tác" },
+                              { step: "shipping", label: "Vận Chuyển" },
+                              { step: "completed", label: "Bàn Giao" }
+                            ].map((s) => {
+                              const statusOrder = ["pending", "confirmed", "shipping", "completed"];
+                              const currentIdx = statusOrder.indexOf(order.status);
+                              const thisIdx = statusOrder.indexOf(s.step);
+                              const isDone = thisIdx <= currentIdx && order.status !== "cancelled";
+
+                              return (
+                                <div key={`${order.id}-${s.step}`} className="space-y-1">
+                                  <div className={`h-1.5 rounded-full ${isDone ? "bg-[#D4AF37]" : "bg-gray-200"}`} />
+                                  <span className={`font-bold transition-colors ${isDone ? "text-[#5C4033]" : "text-gray-400"}`}>
+                                    {s.label}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               ) : (
                 <div className="py-12 text-center bg-[#FAF6F0] rounded-2xl border border-dashed border-[#EADBC8]">

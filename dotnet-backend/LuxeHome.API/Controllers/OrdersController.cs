@@ -120,6 +120,109 @@ namespace LuxeHome.API.Controllers
             }
         }
 
+        [HttpPost]
+        [Authorize]
+        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userIdClaim))
+                    return Unauthorized(new { message = "Bạn cần đăng nhập để đặt hàng." });
+
+                long userId = long.Parse(userIdClaim);
+
+                if (dto == null || dto.Items == null || dto.Items.Count == 0)
+                    return BadRequest(new { message = "Đơn hàng trống. Vui lòng chọn sản phẩm." });
+
+                var orderItems = new List<OrderItem>();
+                decimal subtotal = 0;
+
+                foreach (var it in dto.Items)
+                {
+                    var product = await _db.Products
+                        .Include(p => p.ProductVariants)
+                        .FirstOrDefaultAsync(p => p.Id == it.ProductId);
+
+                    if (product == null)
+                        continue;
+
+                    // FE hiện gửi variantId = productId (chưa chuẩn), nên fallback về variant đầu tiên của SP
+                    var variant = product.ProductVariants.FirstOrDefault(v => v.Id == it.VariantId)
+                                  ?? product.ProductVariants.FirstOrDefault();
+
+                    if (variant == null)
+                        continue;
+
+                    decimal price = variant.CurrentPrice ?? 0;
+                    int qty = it.Quantity > 0 ? it.Quantity : 1;
+                    decimal lineTotal = price * qty;
+                    subtotal += lineTotal;
+
+                    orderItems.Add(new OrderItem
+                    {
+                        ProductId = product.Id,
+                        VariantId = variant.Id,
+                        ProductName = product.ProductName,
+                        Sku = variant.Sku,
+                        Quantity = qty,
+                        OriginalPrice = price,
+                        SellingPrice = price,
+                        DiscountAmount = 0,
+                        TotalPrice = lineTotal,
+                        WarrantyMonths = product.WarrantyMonths
+                    });
+                }
+
+                if (orderItems.Count == 0)
+                    return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
+
+                decimal finalAmount = dto.TotalAmount > 0 ? dto.TotalAmount : subtotal;
+
+                var order = new Order
+                {
+                    OrderCode = "LH" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
+                                + Random.Shared.Next(100, 999).ToString(),
+                    UserId = userId,
+
+                    ReceiverName = string.IsNullOrWhiteSpace(dto.ReceiverName) ? "Khách hàng" : dto.ReceiverName,
+                    ReceiverPhone = string.IsNullOrWhiteSpace(dto.ReceiverPhone) ? "0000000000" : dto.ReceiverPhone,
+                    ShippingAddress = string.IsNullOrWhiteSpace(dto.ShippingAddress) ? "Chưa cập nhật" : dto.ShippingAddress,
+                    CustomerNote = dto.CustomerNote,
+                    CouponCode = dto.CouponCode,
+
+                    SubtotalAmount = subtotal,
+                    DiscountAmount = 0,
+                    ShippingFee = finalAmount - subtotal > 0 ? finalAmount - subtotal : 0,
+                    FinalAmount = finalAmount,
+
+                    OrderStatus = "PENDING",
+                    PaymentStatus = "UNPAID",
+                    ShippingStatus = "PENDING",
+
+                    OrderItems = orderItems
+                };
+
+                _db.Orders.Add(order);
+                await _db.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    orderId = order.OrderCode,
+                    id = order.Id,
+                    totalAmount = order.FinalAmount,
+                    itemCount = orderItems.Count
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("CREATE ORDER ERROR: " + ex.ToString());
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                return BadRequest(new { message = ex.Message, detail = inner });
+            }
+        }
+
         [HttpGet("vnpay-return")]
         public async Task<IActionResult> VnPayReturn()
         {
@@ -227,13 +330,43 @@ namespace LuxeHome.API.Controllers
 
             long userId = long.Parse(userIdClaim);
 
-            // Truy vấn các đơn hàng của user này
+            // Truy vấn các đơn hàng của user này (kèm chi tiết sản phẩm)
             var orders = await _db.Orders
-        .Where(o => o.UserId == 19) 
-        .OrderByDescending(o => o.Id)
-        .ToListAsync();
+                .Where(o => o.UserId == userId)
+                .OrderByDescending(o => o.Id)
+                .Select(o => new
+                {
+                    o.Id,
+                    o.OrderCode,
+                    o.UserId,
+                    o.ReceiverName,
+                    o.ReceiverPhone,
+                    o.ShippingAddress,
+                    o.SubtotalAmount,
+                    o.DiscountAmount,
+                    o.ShippingFee,
+                    o.FinalAmount,
+                    o.OrderStatus,
+                    o.PaymentStatus,
+                    o.ShippingStatus,
+                    o.CouponCode,
+                    o.CustomerNote,
+                    o.ConfirmedAt,
+                    Items = o.OrderItems.Select(i => new
+                    {
+                        i.ProductId,
+                        i.VariantId,
+                        i.ProductName,
+                        i.Sku,
+                        i.Quantity,
+                        i.OriginalPrice,
+                        i.SellingPrice,
+                        i.TotalPrice
+                    }).ToList()
+                })
+                .ToListAsync();
 
-    return Ok(orders);
+            return Ok(orders);
         }
     }
 }

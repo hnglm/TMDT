@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { lazy, memo, Suspense, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   User,
@@ -7,12 +8,10 @@ import {
   Sparkles,
   AlertCircle,
   Phone,
-  Facebook,
-  Globe,
 } from "lucide-react";
 import { authApi } from "../api/api";
-import { useGoogleLogin } from "@react-oauth/google";
-import FacebookLogin from "@greatsumini/react-facebook-login";
+
+const AuthSocialLogins = lazy(() => import("./AuthSocialLogins"));
 
 interface AuthModalProps {
   onClose: () => void;
@@ -25,18 +24,34 @@ interface AuthModalProps {
   }) => void;
 }
 
-export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
+function AuthModalContent({ onClose, onLogin }: AuthModalProps) {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showSocialLogins, setShowSocialLogins] = useState(false);
+
+  useEffect(() => {
+    const idleId =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(() => setShowSocialLogins(true))
+        : undefined;
+    const timerId = idleId === undefined ? window.setTimeout(() => setShowSocialLogins(true), 400) : undefined;
+
+    return () => {
+      if (idleId !== undefined && typeof cancelIdleCallback !== "undefined") {
+        cancelIdleCallback(idleId);
+      }
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
+    };
+  }, []);
 
   const handleAuthSuccess = (
     data: any,
-    defaultName: string = "Thành viên VIP"
+    defaultName: string = "Thành viên VIP",
+    fallbackEmail: string = "",
+    fallbackPhone: string = ""
   ) => {
     const token = data?.token || data?.Token || "";
     const userObj = data?.user || data?.User || {};
@@ -68,8 +83,8 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
         userObj?.name ||
         userObj?.Name ||
         defaultName,
-      email: userObj?.email || userObj?.Email || email.trim(),
-      phone: userObj?.phone || userObj?.Phone || phone.trim() || "",
+      email: userObj?.email || userObj?.Email || fallbackEmail,
+      phone: userObj?.phone || userObj?.Phone || fallbackPhone || "",
       avatarUrl: userObj?.avatarUrl || userObj?.AvatarUrl || "",
       role: calculatedRole,
       roleCode: roleCode,
@@ -83,8 +98,6 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
 
     sessionStorage.setItem("user_role", roleCode);
     localStorage.setItem("user_role", roleCode);
-
-    // Quan trọng: lưu user để Home đọc lại sau khi reload
     sessionStorage.setItem("user", JSON.stringify(normalizedUser));
     localStorage.setItem("user", JSON.stringify(normalizedUser));
 
@@ -99,16 +112,22 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
     window.location.href = "/";
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
+
+    const formData = new FormData(e.currentTarget);
+    const email = String(formData.get("email") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    const fullName = String(formData.get("fullName") ?? "").trim();
+    const phone = String(formData.get("phone") ?? "").trim();
 
     if (!email || !password) {
       setError("Quý khách hãy nhập đầy đủ thông tin.");
       return;
     }
 
-    if (isRegister && (!name || !phone)) {
+    if (isRegister && (!fullName || !phone)) {
       setError("Hãy điền đầy đủ thông tin cá nhân.");
       return;
     }
@@ -118,21 +137,21 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
     try {
       if (isRegister) {
         await authApi.register({
-          email: email.trim(),
+          email,
           password,
-          fullName: name.trim(),
-          phone: phone.trim(),
+          fullName,
+          phone,
         });
 
         alert("Khởi tạo tài khoản thành công! Đang tiến vào phòng trưng bày...");
       }
 
       const data = await authApi.login({
-        email: email.trim(),
+        email,
         password,
       });
 
-      handleAuthSuccess(data, name.trim());
+      handleAuthSuccess(data, fullName, email, phone);
     } catch (err: any) {
       setError(err.response?.data?.message || "Đăng nhập thất bại!");
     } finally {
@@ -140,38 +159,17 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
     }
   };
 
-  const loginWithGoogle = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      try {
-        setError("");
-        setLoading(true);
-
-        const data = await authApi.googleLogin({
-          token: tokenResponse.access_token,
-        });
-
-        handleAuthSuccess(data);
-      } catch (err: any) {
-        console.error("Google login error:", err);
-        setError("Đăng nhập Google thất bại.");
-      } finally {
-        setLoading(false);
-      }
-    },
-    onError: () => setError("Lỗi kết nối Google."),
-  });
-
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
       id="auth-overlay-modal"
     >
       <div
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60"
         onClick={onClose}
-      ></div>
+      />
 
-      <div className="relative bg-[#FAF6F0] w-full max-w-md rounded-2xl p-8 border border-[#EADBC8] shadow-2xl transform transition-all">
+      <div className="relative bg-[#FAF6F0] w-full max-w-md rounded-2xl p-8 border border-[#EADBC8] shadow-2xl">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-[#8B7E74] hover:text-[#5C4033] p-1.5 rounded-full hover:bg-[#F4EBE1]"
@@ -216,8 +214,7 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
                   </span>
                   <input
                     type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    name="fullName"
                     placeholder="Ví dụ: Nguyễn Minh Hoàng"
                     autoComplete="name"
                     className="w-full text-xs bg-white border border-[#EADBC8] rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -235,8 +232,7 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
                   </span>
                   <input
                     type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    name="phone"
                     placeholder="Ví dụ: 0901234567"
                     autoComplete="tel"
                     className="w-full text-xs bg-white border border-[#EADBC8] rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -256,9 +252,8 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
               </span>
               <input
                 type="email"
+                name="email"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
                 placeholder="vip-member@luxehome.vn"
                 autoComplete="email"
                 className="w-full text-xs bg-white border border-[#EADBC8] rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -275,10 +270,10 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
                 <Lock className="w-4 h-4" />
               </span>
               <input
+                key={isRegister ? "register-password" : "login-password"}
                 type="password"
+                name="password"
                 required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete={isRegister ? "new-password" : "current-password"}
                 className="w-full text-xs bg-white border border-[#EADBC8] rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
@@ -309,64 +304,18 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
             <div className="flex-grow border-t border-[#EADBC8]"></div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => loginWithGoogle()}
-              type="button"
-              disabled={loading}
-              className="flex items-center justify-center gap-2 py-2 px-3 bg-white border border-[#EADBC8] hover:bg-[#F4EBE1] text-[#5C4033] rounded-xl text-[11px] font-semibold transition-colors shadow-sm disabled:opacity-60"
-            >
-              <Globe className="w-3.5 h-3.5 text-[#D4AF37]" />
-              Google
-            </button>
-
-            <FacebookLogin
-              appId="1394088452607338"
-              scope="public_profile"
-              onSuccess={async (res) => {
-                try {
-                  setError("");
-                  setLoading(true);
-
-                  if (!res.accessToken) {
-                    setError("Không lấy được Facebook access token.");
-                    return;
-                  }
-
-                  const data = await authApi.facebookLogin({
-                    token: res.accessToken,
-                  });
-
-                  console.log("Facebook login result:", data);
-
-                  handleAuthSuccess(data, "Facebook User");
-                } catch (err: any) {
-                  console.error("Facebook login error:", err);
-                  setError(
-                    err.response?.data?.message ||
-                      "Đăng nhập Facebook thất bại."
-                  );
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              onFail={(err) => {
-                console.error("Facebook SDK error:", err);
-                setError("Lỗi kết nối Facebook.");
-              }}
-              render={({ onClick }) => (
-                <button
-                  onClick={onClick}
-                  type="button"
-                  disabled={loading}
-                  className="flex items-center justify-center gap-2 py-2 px-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl text-[11px] font-semibold transition-colors shadow-sm disabled:opacity-60"
-                >
-                  <Facebook className="w-3.5 h-3.5" />
-                  Facebook
-                </button>
-              )}
-            />
-          </div>
+          {showSocialLogins ? (
+            <Suspense fallback={<div className="h-9 text-center text-[10px] text-[#8B7E74]">Đang tải đăng nhập nhanh...</div>}>
+              <AuthSocialLogins
+                loading={loading}
+                setLoading={setLoading}
+                setError={setError}
+                onAuthSuccess={handleAuthSuccess}
+              />
+            </Suspense>
+          ) : (
+            <div className="h-9" />
+          )}
         </div>
 
         <div className="mt-6 pt-4 border-t border-[#EADBC8] text-center">
@@ -384,6 +333,13 @@ export default function AuthModal({ onClose, onLogin }: AuthModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+
+function AuthModal(props: AuthModalProps) {
+  return <AuthModalContent {...props} />;
+}
+
+export default memo(AuthModal);

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { lazy, Suspense, useCallback, useState } from "react";
 import Navbar from "./components/Navbar";
 import HomeView from "./components/HomeView";
 import CatalogView from "./components/CatalogView";
@@ -13,11 +13,83 @@ import UserProfile from "./components/UserProfile";
 import AdminPanel from "./components/AdminPanel";
 import ProductDetailModal from "./components/ProductDetailModal";
 import CartSidebar from "./components/CartSidebar";
-import AuthModal from "./components/AuthModal";
+const AuthModal = lazy(() => import("./components/AuthModal"));
 import ChatbotWidget from "./components/ChatbotWidget";
 import { useEffect } from "react";
 // Types
 import { Product, Combo, CartItem, Order, ConsultationSchedule, Coupon } from "./types";
+import { orderApi } from "./api/api";
+
+const extractOrderTimestamp = (rawOrderCode: string | undefined): Date | null => {
+  if (!rawOrderCode) return null;
+
+  const digitsOnly = rawOrderCode.replace(/\D/g, "");
+  if (digitsOnly.length < 13) return null;
+
+  // Nhiều orderCode có hậu tố random, chỉ lấy 13 số đầu tiên của epoch milliseconds
+  const epochMillis = Number(digitsOnly.slice(0, 13));
+  if (!Number.isFinite(epochMillis) || epochMillis <= 0) return null;
+
+  const parsedDate = new Date(epochMillis);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const parseBackendOrderDate = (rawValue: unknown): Date | null => {
+  if (typeof rawValue !== "string" || !rawValue.trim()) return null;
+
+  const normalizedValue = rawValue.trim();
+  const hasTimezone = /(?:Z|[+\-]\d{2}:\d{2})$/i.test(normalizedValue);
+  const looksLikeIso = /^\d{4}-\d{2}-\d{2}T/.test(normalizedValue);
+
+  // Backend đang trả DateTime từ PostgreSQL "timestamp without time zone".
+  // Vì dữ liệu được lưu theo UtcNow, chuỗi ISO không timezone cần được đọc là UTC.
+  const parsed = new Date(looksLikeIso && !hasTimezone ? `${normalizedValue}Z` : normalizedValue);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+// Chuẩn hoá đơn hàng từ Backend (PostgreSQL) sang cấu trúc Order của Frontend
+const mapBackendOrderToFrontend = (o: any): Order => {
+  const statusMap: Record<string, Order["status"]> = {
+    PENDING: "pending",
+    CONFIRMED: "confirmed",
+    SHIPPING: "shipping",
+    DELIVERED: "delivered",
+    COMPLETED: "completed",
+    CANCELLED: "cancelled",
+    PAYMENT_FAILED: "cancelled",
+  };
+
+  const code: string = o.orderCode || String(o.id);
+  const confirmedAtDate = parseBackendOrderDate(o.confirmedAt);
+  const orderCodeDate = extractOrderTimestamp(code);
+  const dateObj =
+    confirmedAtDate ?? orderCodeDate ?? new Date();
+
+  return {
+    id: code,
+    date: dateObj.toISOString(),
+    customerName: o.receiverName || "Khách hàng",
+    customerPhone: o.receiverPhone || "",
+    shippingAddress: { city: "", district: "", addressDetail: o.shippingAddress || "" },
+    items: (o.items || []).map((i: any) => ({
+      productId: String(i.productId),
+      name: i.productName || "Sản phẩm",
+      price: Number(i.sellingPrice ?? i.originalPrice ?? 0),
+      quantity: i.quantity ?? 1,
+      color: "",
+      material: "",
+      assembleService: false,
+    })),
+    couponApplied: o.couponCode || undefined,
+    discountAmount: Number(o.discountAmount ?? 0),
+    shippingFee: Number(o.shippingFee ?? 0),
+    totalAmount: Number(o.finalAmount ?? 0),
+    paymentMethod: "COD",
+    status: statusMap[o.orderStatus] || "pending",
+    trackingSteps: [],
+    paymentStatus: o.paymentStatus === "PAID" ? "Đã thanh toán" : "Chưa thanh toán",
+  };
+};
 
 // Data
 import {
@@ -41,6 +113,8 @@ interface UserSession {
   status?: string;
 }
 export default function App() {
+  const PRODUCT_PAGE_SIZE = 12;
+  const CART_STORAGE_KEY = "luxehome_cart";
   // Navigation States
   const [activeTab, setActiveTab] = useState<string>("home");
   const [catalogFilters, setCatalogFilters] = useState<{ category?: string; style?: string }>({});
@@ -54,8 +128,22 @@ export default function App() {
   const [coupons, setCoupons] = useState<Coupon[]>(MOCK_COUPONS);
   
   // Shopping Cart & Wishlist States
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const savedCart = localStorage.getItem(CART_STORAGE_KEY);
+      if (!savedCart) return [];
+      const parsedCart = JSON.parse(savedCart);
+      return Array.isArray(parsedCart) ? parsedCart : [];
+    } catch (error) {
+      console.error("Lỗi đọc giỏ hàng từ localStorage:", error);
+      return [];
+    }
+  });
   const [wishlist, setWishlist] = useState<string[]>(["prod-01", "prod-03"]);
+  const [catalogCurrentPage, setCatalogCurrentPage] = useState<number>(1);
+  const [catalogTotalPages, setCatalogTotalPages] = useState<number>(1);
+  const [catalogTotalItems, setCatalogTotalItems] = useState<number>(0);
+  const [isCatalogLoading, setIsCatalogLoading] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
   const savedUser = sessionStorage.getItem("user");
@@ -179,58 +267,87 @@ const savedRole = sessionStorage.getItem("user_role");
     .catch(err => console.error("Lỗi đồng bộ Coupons:", err));
   }, []);
 
-  useEffect(() => {
-    fetch("http://localhost:5200/api/products?page=1&pageSize=100") // Lấy tạm 100 SP cho Storefront
+  const mapBackendProductsToFrontend = useCallback((productList: any[]) => {
+    const mappedProducts = productList.map((item: any) => {
+      const mappedImages = item.productImages && item.productImages.length > 0
+        ? item.productImages.map((img: any) => img.imageUrl)
+        : ["https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=800"];
+
+      const currentPrice = item.productVariants && item.productVariants.length > 0
+        ? item.productVariants[0].currentPrice
+        : 15000000;
+
+      return {
+        id: item.id.toString(),
+        name: item.productName || "Sản phẩm chưa cập nhật",
+        price: currentPrice,
+        rating: item.averageRating || 5,
+        category: item.category?.slug || "phong-khach",
+        categoryName: item.category?.categoryName || "Phòng Khách",
+        style: item.style || "Modern",
+        images: mappedImages,
+        description: item.shortDescription || "",
+        longDescription: item.description || "",
+        material: item.material || "Gỗ tự nhiên cao cấp",
+        dimensions: "Kích thước tiêu chuẩn",
+        colors: item.productVariants?.map((v:any) => v.color).filter(Boolean) || ["Mặc định"],
+        features: ["Bảo hành LuxeHome"],
+        warranty: `${item.warrantyMonths || 12} tháng`,
+        stock: 10,
+        brand: "LuxeHome",
+        status: item.status || "ACTIVE",
+        reviews: []
+      };
+    });
+
+    return mappedProducts.filter((p: any) => p.status !== "INACTIVE");
+  }, []);
+
+  const fetchCatalogProducts = useCallback((page: number) => {
+    setIsCatalogLoading(true);
+    fetch(`http://localhost:5200/api/products?page=${page}&pageSize=${PRODUCT_PAGE_SIZE}`)
       .then(res => {
         if (!res.ok) throw new Error("Cổng API Backend từ chối kết nối");
         return res.json();
       })
       .then(data => {
-        const productList = data.items || data.Items || data; 
-        
-        if (productList && productList.length > 0) {
-          // Bước 1: Map dữ liệu thô từ Backend sang cấu trúc Frontend
-          const mappedProducts = productList.map((item: any) => {
-            const mappedImages = item.productImages && item.productImages.length > 0 
-              ? item.productImages.map((img: any) => img.imageUrl) 
-              : ["https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=800"];
+        const productList = data.items || data.Items || data;
+        const totalItemsFromApi = data.totalItems ?? data.TotalItems ?? data.totalCount ?? data.TotalCount;
+        const totalPagesFromApi = data.totalPages ?? data.TotalPages;
 
-            const currentPrice = item.productVariants && item.productVariants.length > 0 
-              ? item.productVariants[0].currentPrice 
-              : 15000000;
+        if (Array.isArray(productList)) {
+          setProducts(mapBackendProductsToFrontend(productList));
+          const computedTotalItems = typeof totalItemsFromApi === "number"
+            ? totalItemsFromApi
+            : productList.length;
+          const computedTotalPages = typeof totalPagesFromApi === "number"
+            ? totalPagesFromApi
+            : Math.max(1, Math.ceil(computedTotalItems / PRODUCT_PAGE_SIZE));
 
-            return {
-              id: item.id.toString(),
-              name: item.productName || "Sản phẩm chưa cập nhật",
-              price: currentPrice,
-              rating: item.averageRating || 5,
-              category: item.category?.slug || "phong-khach",
-              categoryName: item.category?.categoryName || "Phòng Khách",
-              style: item.style || "Modern",
-              images: mappedImages,
-              description: item.shortDescription || "",
-              longDescription: item.description || "",
-              material: item.material || "Gỗ tự nhiên cao cấp",
-              dimensions: "Kích thước tiêu chuẩn",
-              colors: item.productVariants?.map((v:any) => v.color).filter(Boolean) || ["Mặc định"],
-              features: ["Bảo hành LuxeHome"],
-              warranty: `${item.warrantyMonths || 12} tháng`,
-              stock: 10,
-              brand: "LuxeHome",
-              status: item.status || "ACTIVE", // Cần gán thuộc tính status
-              reviews: []
-            };
-          });
-
-          // Bước 2: Lọc sản phẩm (Chỉ giữ lại những sản phẩm ĐANG BÁN)
-          const activeProducts = mappedProducts.filter((p: any) => p.status !== "INACTIVE");
-          
-          // Bước 3: Đưa dữ liệu đã lọc vào state
-          setProducts(activeProducts);
+          setCatalogTotalItems(computedTotalItems);
+          setCatalogTotalPages(computedTotalPages);
+          setCatalogCurrentPage(page);
+        } else {
+          setProducts([]);
+          setCatalogTotalItems(0);
+          setCatalogTotalPages(1);
+          setCatalogCurrentPage(1);
         }
       })
-      .catch(err => console.error("❌ Lỗi API:", err));
-  }, []);
+      .catch(err => {
+        console.error("❌ Lỗi API:", err);
+        setProducts([]);
+      })
+      .finally(() => setIsCatalogLoading(false));
+  }, [PRODUCT_PAGE_SIZE, mapBackendProductsToFrontend]);
+
+  useEffect(() => {
+    fetchCatalogProducts(1);
+  }, [fetchCatalogProducts]);
+
+  useEffect(() => {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  }, [cart, CART_STORAGE_KEY]);
 
 
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
@@ -241,10 +358,14 @@ const savedRole = sessionStorage.getItem("user_role");
 
   const handleNavigateToCatalogWithFilters = (filters: { category?: string; style?: string }) => {
     setCatalogFilters(filters);
+    setCatalogCurrentPage(1);
+    fetchCatalogProducts(1);
     setActiveTab("catalog");
   };
 
-  const handleLogin = (user: any) => {
+  const handleCloseAuth = useCallback(() => setIsAuthOpen(false), []);
+
+  const handleLogin = useCallback((user: any) => {
     setCurrentUser(user);
     if (user.role === "admin") {
       setActiveTab("admin");
@@ -252,7 +373,7 @@ const savedRole = sessionStorage.getItem("user_role");
     } else {
       setActiveTab("home");
     }
-  };
+  }, []);
 
   const handleLogout = () => {
   setCurrentUser(null);
@@ -265,6 +386,7 @@ const savedRole = sessionStorage.getItem("user_role");
   localStorage.removeItem("token");
   localStorage.removeItem("user_role");
   localStorage.removeItem("user");
+  localStorage.removeItem(CART_STORAGE_KEY);
 
   setActiveTab("home");
 };
@@ -311,12 +433,34 @@ const savedRole = sessionStorage.getItem("user_role");
     setWishlist((prev) => prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]);
   };
 
+  const loadMyOrders = () => {
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token");
+    if (!token) return;
+    orderApi
+      .getMyOrders()
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          setOrders(data.map(mapBackendOrderToFrontend));
+        }
+      })
+      .catch((err) => console.error("Lỗi tải đơn hàng từ Backend:", err));
+  };
+
+  // Tải đơn hàng thực tế của user ngay khi đăng nhập (thay cho mock INITIAL_ORDERS)
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadMyOrders();
+    }
+  }, [currentUser?.id]);
+
   const handleCheckoutSubmit = (newCreatedOrder: Order) => {
     setOrders((prev) => [newCreatedOrder, ...prev]);
     setCart([]);
     setIsCartOpen(false);
     setActiveTab("profile");
     setPlacedOrderForEmail(newCreatedOrder);
+    // Đồng bộ lại danh sách đơn thực tế từ PostgreSQL
+    loadMyOrders();
   };
 
   const handleUpdateOrderStatus = (orderId: string, status: Order["status"]) => {
@@ -539,6 +683,11 @@ const savedRole = sessionStorage.getItem("user_role");
         {activeTab === "catalog" && (
           <CatalogView
             products={products}
+            currentPage={catalogCurrentPage}
+            totalPages={catalogTotalPages}
+            totalItems={catalogTotalItems}
+            isLoading={isCatalogLoading}
+            onPageChange={(page) => fetchCatalogProducts(page)}
             onSelectProduct={(p) => setSelectedProductForDetail(p)}
             onToggleWishlist={handleToggleWishlist}
             wishlist={wishlist}
@@ -653,7 +802,11 @@ const savedRole = sessionStorage.getItem("user_role");
         />
       )}
 
-      {isAuthOpen && <AuthModal onClose={() => setIsAuthOpen(false)} onLogin={handleLogin} />}
+      {isAuthOpen && (
+        <Suspense fallback={null}>
+          <AuthModal onClose={handleCloseAuth} onLogin={handleLogin} />
+        </Suspense>
+      )}
       <ChatbotWidget products={products} onSelectProduct={(p) => setSelectedProductForDetail(p)} />
 
       {placedOrderForEmail && (

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { X, Heart, Shield, Rotate3d, Check, Sparkles, Scale } from "lucide-react";
 import { Product } from "../types";
 
@@ -21,6 +21,20 @@ export default function ProductDetailModal({
   onToggleWishlist,
   isWishlisted,
 }: ProductDetailModalProps) {
+  useEffect(() => {
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    // Lock background scroll while modal is mounted.
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, []);
+
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [is360Active, setIs360Active] = useState(false);
   const [selectedColor, setSelectedColor] = useState(product.colors[0] || "Default");
@@ -52,12 +66,12 @@ export default function ProductDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" id="product-detail-modal">
-      <div className="flex items-center justify-center min-h-screen p-4 md:p-8">
+    <div className="fixed inset-0 z-50 overscroll-contain overflow-y-auto" id="product-detail-modal">
+      <div className="flex min-h-full items-start justify-center px-[4vw] py-[3vh] md:items-center md:p-8">
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
 
-        <div className="relative bg-[#FAF6F0] rounded-2xl max-w-4xl w-full mx-auto shadow-2xl overflow-hidden border border-[#EADBC8] transform transition-all">
-          
+        <div className="relative mx-auto h-auto max-h-[94vh] w-[92vw] max-w-4xl overflow-hidden rounded-2xl border border-[#EADBC8] bg-[#FAF6F0] shadow-2xl transition-all">
+
           {/* Header Controls */}
           <div className="absolute top-4 right-4 z-10 flex gap-2">
             <button
@@ -76,8 +90,8 @@ export default function ProductDetailModal({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2">
-            
+          <div className="grid max-h-[94vh] grid-cols-1 overflow-y-auto md:grid-cols-2">
+
             {/* Visual Section */}
             <div className="p-6 bg-white flex flex-col justify-between border-r border-[#EADBC8]">
               <div>
@@ -96,7 +110,7 @@ export default function ProductDetailModal({
                     className="w-full h-full object-cover transition-all duration-700"
                     id="zoomable-preview-img"
                   />
-                  
+
                   {is360Active && (
                     <div className="absolute inset-0 bg-black/5 flex items-center justify-center pointer-events-none">
                       <div className="px-3 py-1 bg-[#5C4033]/90 text-white text-[11px] font-semibold tracking-wider rounded-full uppercase flex items-center gap-1.5 shadow-lg">
@@ -127,9 +141,8 @@ export default function ProductDetailModal({
                     <button
                       key={img}
                       onClick={() => setActiveImageIndex(i)}
-                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                        activeImageIndex === i ? "border-[#D4AF37] ring-1 ring-[#D4AF37]" : "border-transparent opacity-70 hover:opacity-100"
-                      }`}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${activeImageIndex === i ? "border-[#D4AF37] ring-1 ring-[#D4AF37]" : "border-transparent opacity-70 hover:opacity-100"
+                        }`}
                     >
                       <img src={img} alt="thumbnail" className="w-full h-full object-cover" />
                     </button>
@@ -156,7 +169,7 @@ export default function ProductDetailModal({
                 <h1 className="font-serif text-2xl font-bold text-[#1A1A1A] leading-tight mb-2">
                   {product.name}
                 </h1>
-                
+
                 <div className="flex items-baseline gap-3 mb-4">
                   <span className="text-2xl font-bold text-[#D4AF37]">
                     {formattedPrice(product.price)}
@@ -195,11 +208,10 @@ export default function ProductDetailModal({
                         <button
                           key={color}
                           onClick={() => setSelectedColor(color)}
-                          className={`px-3 py-1.5 text-xs rounded-full border transition-all ${
-                            selectedColor === color
-                              ? "bg-[#5C4033] text-white border-[#5C4033] shadow-sm"
-                              : "bg-white text-[#5C4033] border-[#EADBC8] hover:bg-[#FAF6F0]"
-                          }`}
+                          className={`px-3 py-1.5 text-xs rounded-full border transition-all ${selectedColor === color
+                            ? "bg-[#5C4033] text-white border-[#5C4033] shadow-sm"
+                            : "bg-white text-[#5C4033] border-[#EADBC8] hover:bg-[#FAF6F0]"
+                            }`}
                         >
                           {color}
                         </button>
@@ -227,7 +239,7 @@ export default function ProductDetailModal({
               <div className="space-y-3">
                 <div className="flex gap-3">
                   <div className="flex items-center border border-[#EADBC8] rounded-xl bg-white overflow-hidden">
-                  <button
+                    <button
                       onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
                       className="px-3 py-2 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold"
                     >
@@ -245,13 +257,12 @@ export default function ProductDetailModal({
                   <button
                     onClick={handleAddToCartClick}
                     disabled={product.stock <= 0}
-                    className={`flex-1 py-3 px-6 rounded-xl flex items-center justify-center gap-2 font-bold text-sm tracking-wide transition-all ${
-                      isAddedSuccess
-                        ? "bg-emerald-600 text-white"
-                        : product.stock > 0
+                    className={`flex-1 py-3 px-6 rounded-xl flex items-center justify-center gap-2 font-bold text-sm tracking-wide transition-all ${isAddedSuccess
+                      ? "bg-emerald-600 text-white"
+                      : product.stock > 0
                         ? "bg-gradient-to-r from-[#5C4033] to-[#4A3B32] text-white hover:from-[#4A3B32] hover:to-[#3A2D25] shadow-md hover:shadow-lg"
                         : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                    }`}
+                      }`}
                     id="add-to-cart-action-btn"
                   >
                     {isAddedSuccess ? (
@@ -272,11 +283,10 @@ export default function ProductDetailModal({
 
                 <button
                   onClick={() => onToggleCompare(product)}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition-all ${
-                    isCompared
-                      ? "bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]"
-                      : "bg-transparent text-[#5C4033] border-[#EADBC8] hover:bg-[#F4EBE1]"
-                  }`}
+                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition-all ${isCompared
+                    ? "bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]"
+                    : "bg-transparent text-[#5C4033] border-[#EADBC8] hover:bg-[#F4EBE1]"
+                    }`}
                   id="add-to-compare-btn"
                 >
                   <Scale className="w-4 h-4" />

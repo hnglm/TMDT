@@ -201,7 +201,7 @@ export default function CartSidebar({
 
       {/* Sidebar */}
       <div
-        className={`fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col ${
+        className={`fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col overflow-hidden ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
@@ -216,73 +216,74 @@ export default function CartSidebar({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="overflow-y-auto flex-1">
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-              <ShoppingBag className="w-12 h-12 text-[#EADBC8] mb-4" />
-              <p className="text-[#8B7E74] text-sm">Giỏ hàng của bạn trống</p>
-            </div>
-          ) : (
-            <div className="p-4 space-y-4">
-              {cart.map((item) => (
-                <div
-                  key={item.product.id}
-                  className="flex gap-3 p-3 bg-[#FAF6F0] rounded-lg border border-[#EADBC8]"
-                >
-                  <img
-                    src={item.product.images[0]}
-                    alt={item.product.name}
-                    className="w-20 h-20 object-cover rounded"
-                  />
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm text-[#1A1A1A]">
-                      {item.product.name}
-                    </p>
-                    <p className="text-xs text-[#8B7E74]">
-                      {new Intl.NumberFormat("vi-VN", {
-                        style: "currency",
-                        currency: "VND",
-                      }).format(item.product.price)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <button
-                        onClick={() =>
-                          onUpdateQuantity(
-                            item.product.id,
-                            Math.max(1, item.quantity - 1)
-                          )
-                        }
-                        className="px-2 py-1 bg-white border border-[#EADBC8] rounded text-xs"
-                      >
-                        -
-                      </button>
-                      <span className="text-sm">{item.quantity}</span>
-                      <button
-                        onClick={() =>
-                          onUpdateQuantity(item.product.id, item.quantity + 1)
-                        }
-                        className="px-2 py-1 bg-white border border-[#EADBC8] rounded text-xs"
-                      >
-                        +
-                      </button>
-                      <button
-                        onClick={() => onRemoveItem(item.product.id)}
-                        className="ml-auto text-red-500 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+        <div className="cart-modal-scrollbar flex-1 min-h-0 overflow-y-auto">
+          {/* Content */}
+          <div>
+            {cart.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                <ShoppingBag className="w-12 h-12 text-[#EADBC8] mb-4" />
+                <p className="text-[#8B7E74] text-sm">Giỏ hàng của bạn trống</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                {cart.map((item) => (
+                  <div
+                    key={item.product.id}
+                    className="flex gap-3 p-3 bg-[#FAF6F0] rounded-lg border border-[#EADBC8]"
+                  >
+                    <img
+                      src={item.product.images[0]}
+                      alt={item.product.name}
+                      className="w-20 h-20 shrink-0 object-cover rounded"
+                    />
+                    <div className="flex-1">
+                      <p className="font-semibold text-sm text-[#1A1A1A]">
+                        {item.product.name}
+                      </p>
+                      <p className="text-xs text-[#8B7E74]">
+                        {new Intl.NumberFormat("vi-VN", {
+                          style: "currency",
+                          currency: "VND",
+                        }).format(item.product.price)}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          onClick={() =>
+                            onUpdateQuantity(
+                              item.product.id,
+                              Math.max(1, item.quantity - 1)
+                            )
+                          }
+                          className="px-2 py-1 bg-white border border-[#EADBC8] rounded text-xs"
+                        >
+                          -
+                        </button>
+                        <span className="text-sm">{item.quantity}</span>
+                        <button
+                          onClick={() =>
+                            onUpdateQuantity(item.product.id, item.quantity + 1)
+                          }
+                          className="px-2 py-1 bg-white border border-[#EADBC8] rounded text-xs"
+                        >
+                          +
+                        </button>
+                        <button
+                          onClick={() => onRemoveItem(item.product.id)}
+                          className="ml-auto text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Checkout Section */}
-        {cart.length > 0 && (
-          <div className="border-t border-[#EADBC8] p-6 space-y-4">
+          {/* Checkout Section */}
+          {cart.length > 0 && (
+            <div className="border-t border-[#EADBC8] p-6 space-y-4">
             {/* Shipping Address */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-[#4A3B32]">
@@ -400,8 +401,9 @@ export default function CartSidebar({
               <Check className="w-5 h-5" />
               {isLoading ? "Đang xử lý..." : "Ký Đơn Đặt Hàng"}
             </button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

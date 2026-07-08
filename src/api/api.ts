@@ -15,7 +15,7 @@ const toPascalCase = (obj: any): any => {
 };
 
 const api = axios.create({
-  baseURL: 'https://clause-accuracy-kangaroo.ngrok-free.dev',
+  baseURL: 'http://localhost:5200',
   timeout: 10000,
   headers: {
     'ngrok-skip-browser-warning': 'true',
@@ -49,6 +49,12 @@ export const orderApi = {
     items: { productId: number; variantId: number; quantity: number }[] 
   }) => {
     const response = await api.post('/api/orders', data);
+    return response.data;
+  },
+
+  // Lấy danh sách đơn hàng của user đang đăng nhập
+  getMyOrders: async () => {
+    const response = await api.get('/api/Orders/my-orders');
     return response.data;
   }
 };
