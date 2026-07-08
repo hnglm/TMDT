@@ -446,6 +446,24 @@ const savedRole = sessionStorage.getItem("user_role");
       .catch((err) => console.error("Lỗi tải đơn hàng từ Backend:", err));
   };
 
+  useEffect(() => {
+    const currentPath = window.location.pathname.toLowerCase();
+    if (currentPath !== "/checkout/success") return;
+
+    const orderId = new URLSearchParams(window.location.search).get("orderId");
+
+    setCart([]);
+    setIsCartOpen(false);
+    setActiveTab("profile");
+    loadMyOrders();
+
+    alert(orderId
+      ? `Thanh toán VNPay thành công. Mã đơn: ${orderId}`
+      : "Thanh toán VNPay thành công.");
+
+    window.history.replaceState({}, "", "/");
+  }, []);
+
   // Tải đơn hàng thực tế của user ngay khi đăng nhập (thay cho mock INITIAL_ORDERS)
   useEffect(() => {
     if (currentUser?.id) {

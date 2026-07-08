@@ -46,6 +46,11 @@ namespace LuxeHome.API.Controllers
                     });
                 }
 
+                if (dto.Items == null || dto.Items.Count == 0)
+                {
+                    return BadRequest(new { message = "Đơn hàng trống. Vui lòng chọn sản phẩm." });
+                }
+
                 if (dto.UserId <= 0)
                 {
                     return BadRequest(new
@@ -66,6 +71,53 @@ namespace LuxeHome.API.Controllers
                     });
                 }
 
+                var orderItems = new List<OrderItem>();
+                decimal subtotal = 0;
+
+                foreach (var it in dto.Items)
+                {
+                    var itemData = await _db.ProductVariants
+                        .Where(v => v.ProductId == it.ProductId)
+                        .OrderByDescending(v => v.Id == it.VariantId)
+                        .Select(v => new
+                        {
+                            ProductId = v.ProductId,
+                            VariantId = v.Id,
+                            ProductName = v.Product.ProductName,
+                            Sku = v.Sku,
+                            CurrentPrice = v.CurrentPrice,
+                            WarrantyMonths = v.Product.WarrantyMonths
+                        })
+                        .FirstOrDefaultAsync();
+
+                    if (itemData == null)
+                        continue;
+
+                    decimal price = itemData.CurrentPrice ?? 0;
+                    int qty = it.Quantity > 0 ? it.Quantity : 1;
+                    decimal lineTotal = price * qty;
+                    subtotal += lineTotal;
+
+                    orderItems.Add(new OrderItem
+                    {
+                        ProductId = itemData.ProductId,
+                        VariantId = itemData.VariantId,
+                        ProductName = itemData.ProductName,
+                        Sku = itemData.Sku,
+                        Quantity = qty,
+                        OriginalPrice = price,
+                        SellingPrice = price,
+                        DiscountAmount = 0,
+                        TotalPrice = lineTotal,
+                        WarrantyMonths = itemData.WarrantyMonths
+                    });
+                }
+
+                if (orderItems.Count == 0)
+                {
+                    return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
+                }
+
                 string vnpayOrderId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
                 var order = new Order
@@ -73,18 +125,22 @@ namespace LuxeHome.API.Controllers
                     OrderCode = vnpayOrderId,
                     UserId = dto.UserId,
 
-                    SubtotalAmount = dto.TotalAmount,
+                    ReceiverName = string.IsNullOrWhiteSpace(dto.ReceiverName) ? "Khách hàng" : dto.ReceiverName,
+                    ReceiverPhone = string.IsNullOrWhiteSpace(dto.ReceiverPhone) ? "0000000000" : dto.ReceiverPhone,
+                    ShippingAddress = string.IsNullOrWhiteSpace(dto.ShippingAddress) ? "Chưa cập nhật" : dto.ShippingAddress,
+                    CustomerNote = dto.CustomerNote,
+                    CouponCode = dto.CouponCode,
+
+                    SubtotalAmount = subtotal,
                     DiscountAmount = 0,
-                    ShippingFee = 0,
+                    ShippingFee = dto.TotalAmount - subtotal > 0 ? dto.TotalAmount - subtotal : 0,
                     FinalAmount = dto.TotalAmount,
 
                     OrderStatus = "PENDING",
                     PaymentStatus = "UNPAID",
                     ShippingStatus = "PENDING",
 
-                    ReceiverName = "Khách hàng",
-                    ReceiverPhone = "0000000000",
-                    ShippingAddress = "Chưa cập nhật"
+                    OrderItems = orderItems
                 };
 
                 _db.Orders.Add(order);
