@@ -15,7 +15,43 @@ using LuxeHome.Application.Services;
 using LuxeHome.API.Configurations;
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+// Nạp GEMINI_API_KEY từ .env.local ở root repo (cùng file frontend đang dùng)
+TryLoadEnvLocal();
+
 var builder = WebApplication.CreateBuilder(args);
+
+static void TryLoadEnvLocal()
+{
+    var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+    while (dir != null)
+    {
+        var envPath = Path.Combine(dir.FullName, ".env.local");
+        if (File.Exists(envPath))
+        {
+            foreach (var rawLine in File.ReadAllLines(envPath))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith('#')) continue;
+
+                var eq = line.IndexOf('=');
+                if (eq <= 0) continue;
+
+                var key = line[..eq].Trim();
+                var value = line[(eq + 1)..].Trim().Trim('"').Trim('\'');
+                if (string.IsNullOrEmpty(key)) continue;
+
+                // Không ghi đè biến môi trường đã set sẵn (launchSettings / CI)
+                if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
+                    Environment.SetEnvironmentVariable(key, value);
+            }
+
+            Console.WriteLine($"[LuxeHome] Loaded secrets from {envPath}");
+            return;
+        }
+
+        dir = dir.Parent;
+    }
+}
 
 var apiFolderPath = Path.Combine(Directory.GetCurrentDirectory(), "LuxeHome.API");
 builder.Configuration.SetBasePath(apiFolderPath)
@@ -66,6 +102,7 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     });
 var key = Encoding.UTF8.GetBytes(JwtSettings.Secret);
 
@@ -99,11 +136,20 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddHttpClient<IAIService, GeminiAIService>();
 
-// Đăng ký các UseCase Nghiệp vụ
+// Đăng ký các UseCase Nghiệp vụ (prompt AI nằm trong ChatUseCase / ImageSearchUseCase)
 builder.Services.AddScoped<ChatUseCase>();
 builder.Services.AddScoped<ImageSearchUseCase>();
 builder.Services.AddScoped<UserUseCase>(); 
 builder.Services.AddScoped<VnPayService>();
+
+// appsettings có ApiKey: "" nên không dùng ?? — chuỗi rỗng vẫn “truthy” với null-coalescing
+var geminiKey = builder.Configuration["Gemini:ApiKey"];
+if (string.IsNullOrWhiteSpace(geminiKey))
+    geminiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+var geminiReady = !string.IsNullOrWhiteSpace(geminiKey);
+Console.WriteLine(geminiReady
+    ? "[LuxeHome] Gemini AI: ONLINE (Chat + Image Search)"
+    : "[LuxeHome] Gemini AI: OFFLINE — thiếu GEMINI_API_KEY trong .env.local hoặc Gemini:ApiKey");
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>

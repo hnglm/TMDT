@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using LuxeHome.Domain.Entities;
 using LuxeHome.Domain.Interfaces;
+using Microsoft.Extensions.Configuration;
 
 namespace LuxeHome.Infrastructure.Services
 {
@@ -13,12 +14,34 @@ namespace LuxeHome.Infrastructure.Services
     {
         private readonly string _apiKey;
         private readonly HttpClient _httpClient;
-        private const string BaseUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
+        private readonly string _model;
+        private string GenerateUrl =>
+            $"https://generativelanguage.googleapis.com/v1beta/models/{_model}:generateContent";
 
-        public GeminiAIService(HttpClient httpClient)
+        public GeminiAIService(HttpClient httpClient, IConfiguration configuration)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            _apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
+            ArgumentNullException.ThrowIfNull(configuration);
+
+            _apiKey = FirstNonEmpty(
+                configuration["Gemini:ApiKey"],
+                Environment.GetEnvironmentVariable("GEMINI_API_KEY"));
+
+            _model = FirstNonEmpty(
+                configuration["Gemini:Model"],
+                Environment.GetEnvironmentVariable("GEMINI_MODEL"),
+                "gemini-2.5-flash");
+        }
+
+        private static string FirstNonEmpty(params string?[] values)
+        {
+            foreach (var value in values)
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+
+            return string.Empty;
         }
 
         public bool IsOffline()
@@ -30,12 +53,12 @@ namespace LuxeHome.Infrastructure.Services
         {
             if (IsOffline())
             {
-                return "Chào bạn! LuxeHome Concierge hiện đang hoạt động ở chế độ mô phỏng kiểm thử (.NET Offline). Quý khách hãy tham khảo dòng sản phẩm Sofa Royal Signature hoặc Bàn Trà Cẩm Thạch Carrara của chúng tôi bằng các công cụ tìm kiếm!";
+                return "chat đang không hoạt động, bạn vui lòng thử lại sau";
             }
 
             try
             {
-                var url = $"{BaseUrl}?key={_apiKey}";
+                var url = $"{GenerateUrl}?key={_apiKey}";
                 
                 // Ghép nội dung lịch sử tin nhắn
                 var chatBuilder = new StringBuilder();
@@ -70,6 +93,8 @@ namespace LuxeHome.Infrastructure.Services
                 var response = await _httpClient.PostAsync(url, content);
                 if (!response.IsSuccessStatusCode)
                 {
+                    var errorBody = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[C# GeminiAIService] HTTP {(int)response.StatusCode}: {errorBody}");
                     return "LuxeHome chân thành kính chào Anh/Chị! Hệ thống đang bận hiệu chỉnh sớ mộc. Rất mong Anh/Chị ghé xem trực tiếp các tác phẩm mộc độc bản của chúng tôi.";
                 }
 
@@ -113,7 +138,7 @@ namespace LuxeHome.Infrastructure.Services
 
             try
             {
-                var url = $"{BaseUrl}?key={_apiKey}";
+                var url = $"{GenerateUrl}?key={_apiKey}";
                 
                 // Tách lọc tiền tố base64 data:xxx/yyy;base64,
                 string cleanBase64 = imageBase64;

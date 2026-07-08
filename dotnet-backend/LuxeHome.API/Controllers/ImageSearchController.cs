@@ -7,6 +7,7 @@ namespace LuxeHome.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/image-search")]
     public class ImageSearchController : ControllerBase
     {
         private readonly ImageSearchUseCase _imageSearchUseCase;

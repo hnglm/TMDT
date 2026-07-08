@@ -26,7 +26,7 @@ namespace LuxeHome.Application.UseCases
             "  8. Ghế Công Cái Học Ergonomic Masterpiece (15.4 triệu)\n" +
             "- Gợi ý phân bổ theo ngân sách khách hứa và diện tích phòng.\n" +
             "- Thuyết phục khách đặt lịch hẹn tư vấn thiết kế miễn phí 2 giờ.\n" +
-            "Hãy trả lời cô đọng, dễ đọc bằng các định dạng markdown nhã nhặn.";
+            "Hãy trả lời cô đọng, dễ đọc bằng các định dạng nhã nhặn.";
 
         public ChatUseCase(IAIService aiService)
         {
