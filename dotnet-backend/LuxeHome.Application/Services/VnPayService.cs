@@ -37,8 +37,8 @@ namespace LuxeHome.Application.Services
                 cleanOrderId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
             }
 
-            var txnRef = $"{cleanOrderId}{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
-
+            var txnRef = cleanOrderId;
+            
             var vnpAmount = ((long)Math.Round(amount * 100m, MidpointRounding.AwayFromZero))
                 .ToString(CultureInfo.InvariantCulture);
 

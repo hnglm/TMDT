@@ -12,6 +12,7 @@ using LuxeHome.Application.Jobs;
 using Hangfire;
 using Hangfire.PostgreSql;
 using LuxeHome.Application.Services;
+using LuxeHome.API.Configurations;
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,13 +36,9 @@ builder.Services.AddHangfire(config => config
     .UseRecommendedSerializerSettings()
     .UsePostgreSqlStorage(connectionString)); // Lưu queue vào PostgreSQL
 
-// 2. Khởi động Hangfire Server chạy ngầm
 builder.Services.AddHangfireServer();
-
-// 3. Đăng ký Job của chúng ta
 builder.Services.AddScoped<IPriceUpdateJob, PriceUpdateJob>();
-
-// Cấu hình Swagger hỗ trợ nhập Token JWT khi test API
+builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "LuxeHome API", Version = "v1" });
@@ -70,10 +67,7 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
-
-// Khởi tạo dịch vụ Xác thực nhận diện Token JWT
-var jwtSecret = builder.Configuration["JwtConfig:Secret"] ?? "LuxeHome_Super_Secret_Key_2026_Pro_Project_Long_String_For_Security";
-var key = Encoding.UTF8.GetBytes(jwtSecret);
+var key = Encoding.UTF8.GetBytes(JwtSettings.Secret);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -92,8 +86,17 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = false,
         ClockSkew = TimeSpan.Zero
     };
+    
+    // THÊM ĐOẠN NÀY ĐỂ DEBUG
+    options.Events = new JwtBearerEvents
+    {
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine($"[AUTH FAILED] {context.Exception.Message}");
+            return Task.CompletedTask;
+        }
+    };
 });
-
 builder.Services.AddHttpClient<IAIService, GeminiAIService>();
 
 // Đăng ký các UseCase Nghiệp vụ
@@ -111,9 +114,8 @@ builder.Services.AddCors(options =>
     });
 });
 var app = builder.Build();
-
-app.UseRouting();
 app.UseCors("AllowAll");
+app.UseRouting();
 
 if (app.Environment.IsDevelopment())
 {

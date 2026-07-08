@@ -7,22 +7,26 @@ using LuxeHome.Application.DTOs;
 using Newtonsoft.Json;
 using LuxeHome.Domain.Entities;
 using LuxeHome.Infrastructure.Data;
-
+using LuxeHome.API.Configurations;
+using LuxeHome.Domain.Interfaces; 
+using LuxeHome.Infrastructure.Services; 
 namespace LuxeHome.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     public class UserController : ControllerBase
-    {
+    {   private readonly ITokenService _tokenService; 
         private readonly UserUseCase _userUseCase;
         private readonly LuxeHomeDbContext _context;
 
         public UserController(
             UserUseCase userUseCase,
-            LuxeHomeDbContext context)
+            LuxeHomeDbContext context,
+            ITokenService tokenService)
         {
             _userUseCase = userUseCase;
             _context = context;
+            _tokenService = tokenService;
         }
 
         [HttpPost("register")]
@@ -123,10 +127,10 @@ namespace LuxeHome.API.Controllers
                     _context.Users.Add(user);
                     await _context.SaveChangesAsync();
                 }
-
+                var token = _tokenService.CreateToken(user);
                 return Ok(new
                 {
-                    token = "FACEBOOK_LOGIN_TEMP_TOKEN",
+                    token = token,
                     user = new
                     {
                         id = user.Id,
@@ -245,10 +249,10 @@ public async Task<IActionResult> GoogleLogin([FromBody] SocialLoginRequest reque
                 await _context.SaveChangesAsync();
             }
         }
-
+        var token = _tokenService.CreateToken(user);
         return Ok(new
         {
-            token = "GOOGLE_LOGIN_TEMP_TOKEN",
+            token = token,
             user = new
             {
                 id = user.Id,

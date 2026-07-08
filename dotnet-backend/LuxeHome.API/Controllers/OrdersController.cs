@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using LuxeHome.Infrastructure.Data;
 using LuxeHome.Domain.Entities;
 using System.Globalization;
+using Microsoft.AspNetCore.Authorization;
 
 namespace LuxeHome.API.Controllers
 {
@@ -144,6 +145,8 @@ namespace LuxeHome.API.Controllers
 
             string responseCode = query["vnp_ResponseCode"].ToString();
             string txnRef = query["vnp_TxnRef"].ToString();
+
+            Console.WriteLine("DEBUG: Đang tìm đơn hàng với OrderCode: " + txnRef);
             string amountRaw = query["vnp_Amount"].ToString();
             string transactionNo = query["vnp_TransactionNo"].ToString();
 
@@ -160,6 +163,8 @@ namespace LuxeHome.API.Controllers
             if (order == null)
             {
                 Console.WriteLine("Không tìm thấy đơn hàng với TxnRef: " + txnRef);
+                var totalOrders = await _db.Orders.CountAsync();
+                Console.WriteLine($"DEBUG: Không tìm thấy. Tổng số đơn hàng trong DB: {totalOrders}");
                 return Redirect("http://localhost:3000/checkout/fail?reason=order-not-found");
             }
 
@@ -209,6 +214,26 @@ namespace LuxeHome.API.Controllers
             {
                 paymentUrl
             });
+        }
+        [HttpGet("my-orders")]
+        [Authorize] // Yêu cầu đăng nhập mới được xem
+        public async Task<IActionResult> GetMyOrders()
+        {
+            // Lấy ID người dùng từ Token JWT mà bạn đã cấu hình trong Program.cs
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+            if (string.IsNullOrEmpty(userIdClaim)) 
+                return Unauthorized(new { message = "Bạn cần đăng nhập để xem đơn hàng." });
+
+            long userId = long.Parse(userIdClaim);
+
+            // Truy vấn các đơn hàng của user này
+            var orders = await _db.Orders
+        .Where(o => o.UserId == 19) 
+        .OrderByDescending(o => o.Id)
+        .ToListAsync();
+
+    return Ok(orders);
         }
     }
 }
