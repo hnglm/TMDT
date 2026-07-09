@@ -36,7 +36,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Trong src/api/api.ts
+
 export const orderApi = {
   // Gửi thông tin đơn hàng lên Backend
   createOrder: async (data: { 
@@ -47,14 +47,36 @@ export const orderApi = {
     couponCode?: string;
     paymentMethod: string;
     items: { productId: number; variantId: number; quantity: number }[] 
+    
   }) => {
     const response = await api.post('/api/orders', data);
     return response.data;
   },
 
-  // Lấy danh sách đơn hàng của user đang đăng nhập
+  // --- BỔ SUNG MỚI ---
+
+  // 1. Lấy danh sách đơn hàng (để hiển thị trong UserProfile)
   getMyOrders: async () => {
-    const response = await api.get('/api/Orders/my-orders');
+    const response = await api.get('/api/orders/my-orders');
+    return response.data;
+  },
+  cancelOrder: async (orderId: string, data: { reason: string }) => {
+  // Lưu ý: Backend sẽ nhận được key là "Reason" do PascalCase Interceptor
+  const response = await api.post(`/api/orders/${orderId}/cancel`, data);
+  return response.data;
+},
+
+  // 2. Gửi đánh giá cho sản phẩm trong đơn hàng
+  // Backend sẽ nhận: { OrderId, ProductId, Rating, Comment } (sau khi qua PascalCase interceptor)
+  addReview: async (orderId: string, data: { productId: string; rating: number; comment: string }) => {
+    const response = await api.post(`/api/orders/${orderId}/review`, data);
+    return response.data;
+  },
+
+  // 3. Yêu cầu hoàn hàng
+  // Backend sẽ nhận: { Reason }
+  requestReturn: async (orderId: string, data: { reason: string }) => {
+    const response = await api.post(`/api/orders/${orderId}/return`, data);
     return response.data;
   }
 };

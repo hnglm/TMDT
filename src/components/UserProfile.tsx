@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { User, Phone, MapPin, Heart, ShoppingBag, Star, CheckCircle, RefreshCw, Sparkles } from "lucide-react";
 import { Order, Product } from "../types";
-import { authApi } from "../api/api"; // Import cụm gọi API hệ thống thành viên
-
+import { authApi, orderApi } from "../api/api";
 interface UserProfileProps {
   currentUser: { name: string; email: string; phone?: string } | null;
   onUpdatePersonalInfo: (name: string, email: string, phone?: string) => void;
@@ -27,23 +26,40 @@ export default function UserProfile({
   onCancelOrder
 }: UserProfileProps) {
   
-  const [profileSubTab, setProfileSubTab] = useState<"info" | "orders" | "wishlist">("orders");
+  // --- Trạng thái Sub-tab & Thông tin cá nhân ---
+const [profileSubTab, setProfileSubTab] = useState<"info" | "orders" | "wishlist">("orders");
+const [editedName, setEditedName] = useState(currentUser?.name || "");
+const [editedEmail, setEditedEmail] = useState(currentUser?.email || "");
+const [phone, setPhone] = useState(currentUser?.phone || "");
 
-  // State thông tin cơ bản
-  const [editedName, setEditedName] = useState(currentUser?.name || "");
-  const [editedEmail, setEditedEmail] = useState(currentUser?.email || "");
-  const [phone, setPhone] = useState(currentUser?.phone || "");
-  
-  // State quản lý danh sách sổ địa chỉ nhận hàng thực tế bốc từ Database
-  const [addresses, setAddresses] = useState<any[]>([]);
-  const [loadingAddresses, setLoadingAddresses] = useState(false);
-  
-  const [isSavedInfo, setIsSavedInfo] = useState(false);
-  const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
-  const [newReviewRating, setNewReviewRating] = useState(5);
-  const [newReviewComment, setNewReviewComment] = useState("");
-  const [reviewedProductIds, setReviewedProductIds] = useState<string[]>([]);
+// --- Trạng thái Sổ địa chỉ ---
+const [addresses, setAddresses] = useState<any[]>([]);
+const [loadingAddresses, setLoadingAddresses] = useState(false);
 
+// --- Trạng thái Đánh giá ---
+const [isSavedInfo, setIsSavedInfo] = useState(false);
+const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+const [reviewingProductId, setReviewingProductId] = useState<string | null>(null);
+const [newReviewRating, setNewReviewRating] = useState(5);
+const [newReviewComment, setNewReviewComment] = useState("");
+const [reviewedProductIds, setReviewedProductIds] = useState<string[]>([]);
+
+// --- Trạng thái Đơn hàng (Hủy, Hoàn, Chọn đơn) ---
+const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+const [cancelReason, setCancelReason] = useState("");
+const [returnReason, setReturnReason] = useState("");
+const [selectedReason, setSelectedReason] = useState<string>(""); // Lưu lựa chọn từ radio
+const [customReason, setCustomReason] = useState<string>("");     // Lưu nội dung từ textarea
+const cancelReasons = [
+    "Thay đổi thông tin đơn hàng",
+    "Thay đổi địa chỉ nhận hàng",
+    "Phí vận chuyển cao",
+    "Thời gian giao hàng lâu",
+    "Đặt nhầm/trùng đơn",
+    "Không muốn mua nữa"
+  ];
   // Đổ dữ liệu tài khoản khi currentUser thay đổi trạng thái đăng nhập
   useEffect(() => {
     if (currentUser) {
@@ -116,7 +132,6 @@ export default function UserProfile({
         phone: phone
       });
 
-      // 👑 SỬA DÒNG NÀY: Truyền thêm trạng thái phone mới để React đồng bộ ngay lên UI
       onUpdatePersonalInfo(editedName, editedEmail, phone); 
       
       setIsSavedInfo(true);
@@ -251,21 +266,44 @@ export default function UserProfile({
                               </span>
                             </td>
                             <td className="px-4 py-4 text-center">
-                              {order.status === "pending" && onCancelOrder ? (
-                                <button
-                                  onClick={() => {
-                                    if(window.confirm("Quý khách chắc chắn muốn hủy đơn hàng này?")) {
-                                      onCancelOrder(order.id);
-                                    }
-                                  }}
-                                  className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
-                                >
-                                  Hủy đơn
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-[#8B7E74]">-</span>
-                              )}
-                            </td>
+  {order.status === "pending" ? (
+    // TH: Đơn hàng đang chờ - Cho phép Hủy
+    <button
+      onClick={() => {
+        setSelectedOrder(order);
+        setIsCancelModalOpen(true);
+      }}
+      className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
+    >
+      Hủy đơn
+    </button>
+  ) : order.status === "completed" ? (
+    // TH: Đơn hàng đã hoàn tất - Cho phép Đánh giá & Hoàn hàng
+    <div className="flex flex-col gap-1.5">
+      <button 
+        onClick={() => {
+          setSelectedOrder(order);
+          setIsReviewModalOpen(true);
+        }}
+        className="text-[10px] text-blue-600 hover:underline font-bold uppercase"
+      >
+        Đánh giá
+      </button>
+      <button 
+        onClick={() => {
+          setSelectedOrder(order);
+          setIsReturnModalOpen(true);
+        }}
+        className="text-[10px] text-red-600 hover:underline font-bold uppercase"
+      >
+        Hoàn hàng
+      </button>
+    </div>
+  ) : (
+    // TH: Đang vận chuyển hoặc trạng thái khác - Không cho thao tác
+    <span className="text-[10px] text-[#8B7E74]">-</span>
+  )}
+</td>
                           </tr>
                         ))}
                       </tbody>
@@ -412,6 +450,65 @@ export default function UserProfile({
 
         </div>
       </div>
+      {/* Modal Hủy Đơn kết hợp */}
+{isCancelModalOpen && selectedOrder && (
+  <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+    <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl">
+      <h3 className="font-bold text-lg mb-4 text-[#1A1A1A]">Hủy đơn hàng {selectedOrder.id}</h3>
+      
+      {/* 1. Phần danh sách Radio */}
+      <div className="space-y-2 mb-4">
+        {cancelReasons.map((reason) => (
+          <label key={reason} className="flex items-center gap-2 text-sm cursor-pointer hover:text-[#D4AF37]">
+            <input 
+              type="radio" 
+              name="cancelReason" 
+              value={reason}
+              checked={selectedReason === reason}
+              onChange={(e) => {
+                setSelectedReason(e.target.value);
+                // Nếu chọn mục khác, ta có thể clear customReason hoặc giữ lại tùy ý
+              }}
+            />
+            {reason}
+          </label>
+        ))}
+      </div>
+
+      {/* 2. Phần TextArea cho trường hợp khác hoặc bổ sung */}
+      <div className="mt-4">
+        <p className="text-xs text-gray-500 mb-2">Ghi chú thêm (nếu có):</p>
+        <textarea 
+          value={customReason}
+          onChange={(e) => setCustomReason(e.target.value)}
+          placeholder="Nhập chi tiết tại đây..." 
+          className="w-full h-20 border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37]"
+        />
+      </div>
+
+      {/* Nút Hủy */}
+      <button 
+        onClick={async () => {
+          // Kết hợp cả 2 nguồn dữ liệu
+          const finalReason = selectedReason 
+            ? `${selectedReason}${customReason ? ' - ' + customReason : ''}`
+            : customReason;
+
+          if (!finalReason) {
+            alert("Vui lòng chọn hoặc nhập lý do hủy!");
+            return;
+          }
+
+          await orderApi.cancelOrder(selectedOrder.id, { reason: finalReason });
+          setIsCancelModalOpen(false);
+        }}
+        className="w-full mt-4 py-2 bg-red-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-red-700"
+      >
+        Xác nhận Hủy
+      </button>
+    </div>
+  </div>
+)}
     </div>
   );
 }

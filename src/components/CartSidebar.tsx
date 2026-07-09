@@ -98,7 +98,7 @@ export default function CartSidebar({
     console.log("Order Data:", orderData);
 
     if (paymentMethod === "VNPAY") {
-  const response = await fetch("http://localhost:5200/api/Orders/create-payment-url", {
+  const response = await fetch("http://localhost:5200/api/Payments/vnpay/create-payment-url", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
