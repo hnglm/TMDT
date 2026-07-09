@@ -90,5 +90,90 @@ public async Task<IActionResult> CancelOrder(string id, [FromBody] CancelOrderDt
         return BadRequest(new { message = ex.Message });
     }
 }
+[HttpPost("{id}/return")]
+[Authorize]
+public async Task<IActionResult> RequestReturn(string id, [FromBody] ReturnWarrantyDto dto)
+{
+    try
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        await _orderService.CreateReturnRequestAsync(id, long.Parse(userIdClaim), dto);
+        
+        return Ok(new { message = "Yêu cầu hoàn hàng đã được ghi nhận." });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("RETURN REQUEST ERROR: " + ex);
+
+        return BadRequest(new
+        {
+            message = ex.Message,
+            detail = ex.InnerException?.Message
+        });
+    }
+}
+[HttpPost("{id}/review")]
+[Authorize]
+public async Task<IActionResult> AddReview(string id, [FromBody] AddReviewDto dto)
+{
+    try
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        await _orderService.AddReviewAsync(id, long.Parse(userIdClaim), dto);
+
+        return Ok(new { message = "Đã gửi đánh giá thành công." });
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("ADD REVIEW ERROR: " + ex);
+
+        return BadRequest(new
+        {
+            message = ex.Message,
+            detail = ex.InnerException?.Message
+        });
+    }
+}
+[HttpGet("{id}/review")]
+[Authorize]
+public async Task<IActionResult> GetMyReview(string id)
+{
+    try
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        var review = await _orderService.GetMyReviewAsync(id, long.Parse(userIdClaim));
+
+        return Ok(review);
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
+
+[HttpPut("{id}/review")]
+[Authorize]
+public async Task<IActionResult> UpdateReview(string id, [FromBody] AddReviewDto dto)
+{
+    try
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        await _orderService.UpdateReviewAsync(id, long.Parse(userIdClaim), dto);
+
+        return Ok(new { message = "Đã cập nhật đánh giá thành công." });
+    }
+    catch (Exception ex)
+    {
+        return BadRequest(new { message = ex.Message });
+    }
+}
     }
 }

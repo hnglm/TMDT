@@ -52,7 +52,25 @@ export const orderApi = {
     const response = await api.post('/api/orders', data);
     return response.data;
   },
+  requestReturnWarranty: async (
+  orderId: string,
+  data: { reason: string; accountInfo?: string }
+) => {
+  const response = await api.post(`/api/orders/${orderId}/return`, data);
+  return response.data;
+},
+getMyReview: async (orderId: string) => {
+  const response = await api.get(`/api/orders/${orderId}/review`);
+  return response.data;
+},
 
+updateReview: async (
+  orderId: string,
+  data: { productId: string; rating: number; comment: string }
+) => {
+  const response = await api.put(`/api/orders/${orderId}/review`, data);
+  return response.data;
+},
   // --- BỔ SUNG MỚI ---
 
   // 1. Lấy danh sách đơn hàng (để hiển thị trong UserProfile)

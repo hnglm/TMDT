@@ -40,6 +40,7 @@ public partial class Order
     public long? ConfirmedBy { get; set; }
 
     public DateTime? ConfirmedAt { get; set; }
+    
 
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
 

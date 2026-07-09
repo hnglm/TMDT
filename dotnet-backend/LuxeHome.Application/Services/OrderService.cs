@@ -2,7 +2,6 @@ using LuxeHome.Application.DTOs;
 using LuxeHome.Domain.Entities;
 using LuxeHome.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-
 namespace LuxeHome.Application.Services
 {
     public class OrderService
@@ -129,6 +128,8 @@ namespace LuxeHome.Application.Services
                     o.CouponCode,
                     o.CustomerNote,
                     o.ConfirmedAt,
+                    HasReturnRequest = _db.ReturnWarrantyRequests.Any(r => r.OrderId == o.Id),
+                    HasReview = _db.ProductReviews.Any(r => r.OrderId == o.Id && r.UserId == userId),
                     Items = o.OrderItems.Select(i => new
                     {
                         i.ProductId,
@@ -170,6 +171,167 @@ namespace LuxeHome.Application.Services
     order.CustomerNote = $"[Đã hủy ngày {DateTime.Now}] Lý do: {reason}. " + order.CustomerNote;
 
     // 5. Lưu thay đổi
+    await _db.SaveChangesAsync();
+}
+public async Task CreateReturnRequestAsync(string orderId, long userId, ReturnWarrantyDto dto)
+{
+    if (dto == null)
+        throw new Exception("Dữ liệu yêu cầu hoàn hàng không hợp lệ.");
+
+    if (string.IsNullOrWhiteSpace(dto.Reason))
+        throw new Exception("Vui lòng chọn hoặc nhập lý do hoàn hàng / bảo hành.");
+
+    var order = await _db.Orders
+        .Include(o => o.OrderItems)
+        .FirstOrDefaultAsync(o => o.OrderCode == orderId && o.UserId == userId);
+
+    if (order == null)
+        throw new Exception($"Không tìm thấy đơn hàng {orderId} của user {userId}.");
+
+    var orderStatus = (order.OrderStatus ?? "").Trim().ToUpper();
+    var shippingStatus = (order.ShippingStatus ?? "").Trim().ToUpper();
+
+    if (orderStatus != "COMPLETED")
+        throw new Exception($"Đơn hàng chưa hoàn tất. Trạng thái hiện tại: {order.OrderStatus}");
+
+    if (shippingStatus != "DELIVERED")
+        throw new Exception($"Đơn hàng chưa giao thành công. Trạng thái giao hàng hiện tại: {order.ShippingStatus}");
+    var alreadyRequested = await _db.ReturnWarrantyRequests
+    .AnyAsync(r => r.OrderId == order.Id);
+
+if (alreadyRequested)
+    throw new Exception("Đơn hàng này đã gửi yêu cầu hoàn hàng / bảo hành rồi.");
+    var firstItem = order.OrderItems.FirstOrDefault();
+
+    if (firstItem == null)
+        throw new Exception("Đơn hàng này chưa có sản phẩm chi tiết nên không thể tạo yêu cầu hoàn hàng.");
+
+    var request = new ReturnWarrantyRequest
+    {
+        OrderId = order.Id,
+        OrderItemId = firstItem.Id,
+        UserId = userId,
+
+        RequestCode = "RW" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        RequestType = "RETURN",
+
+        Reason = dto.Reason,
+        AccountInfo = dto.AccountInfo,
+
+        RefundAmount = firstItem.TotalPrice,
+        Status = "PENDING",
+        CreatedAt = DateTime.UtcNow.AddHours(7),
+
+        ImageUrl = null,
+        ResultNote = null
+    };
+
+    _db.ReturnWarrantyRequests.Add(request);
+    await _db.SaveChangesAsync();
+}
+public async Task AddReviewAsync(string orderId, long userId, AddReviewDto dto)
+{
+    if (dto == null)
+        throw new Exception("Dữ liệu đánh giá không hợp lệ.");
+
+    if (dto.ProductId <= 0)
+        throw new Exception("Không tìm thấy sản phẩm để đánh giá.");
+
+    if (dto.Rating < 1 || dto.Rating > 5)
+        throw new Exception("Số sao đánh giá phải từ 1 đến 5.");
+
+    if (string.IsNullOrWhiteSpace(dto.Comment))
+        throw new Exception("Vui lòng nhập nội dung đánh giá.");
+
+    var order = await _db.Orders
+        .Include(o => o.OrderItems)
+        .FirstOrDefaultAsync(o => o.OrderCode == orderId && o.UserId == userId);
+
+    if (order == null)
+        throw new Exception("Không tìm thấy đơn hàng hoặc đơn hàng không thuộc về bạn.");
+
+    var orderStatus = (order.OrderStatus ?? "").Trim().ToUpper();
+
+    if (orderStatus != "COMPLETED")
+        throw new Exception("Chỉ đơn hàng đã hoàn tất mới được đánh giá.");
+
+    var hasProductInOrder = order.OrderItems.Any(i => i.ProductId == dto.ProductId);
+
+    if (!hasProductInOrder)
+        throw new Exception("Sản phẩm này không thuộc đơn hàng nên không thể đánh giá.");
+
+    var alreadyReviewed = await _db.ProductReviews
+        .AnyAsync(r => r.OrderId == order.Id && r.ProductId == dto.ProductId && r.UserId == userId);
+
+    if (alreadyReviewed)
+        throw new Exception("Bạn đã đánh giá sản phẩm này trong đơn hàng rồi.");
+
+    var review = new ProductReview
+    {
+        OrderId = order.Id,
+        ProductId = dto.ProductId,
+        UserId = userId,
+        Rating = dto.Rating,
+        Comment = dto.Comment,
+        CreatedAt = DateTime.UtcNow.AddHours(7)
+    };
+
+    _db.ProductReviews.Add(review);
+    await _db.SaveChangesAsync();
+}
+public async Task<object> GetMyReviewAsync(string orderId, long userId)
+{
+    var order = await _db.Orders
+        .FirstOrDefaultAsync(o => o.OrderCode == orderId && o.UserId == userId);
+
+    if (order == null)
+        throw new Exception("Không tìm thấy đơn hàng hoặc đơn hàng không thuộc về bạn.");
+
+    var review = await _db.ProductReviews
+        .FirstOrDefaultAsync(r => r.OrderId == order.Id && r.UserId == userId);
+
+    if (review == null)
+        throw new Exception("Bạn chưa đánh giá đơn hàng này.");
+
+    return new
+    {
+        review.Id,
+        review.OrderId,
+        review.ProductId,
+        review.Rating,
+        Comment = review.Comment,
+
+        // Tạm thời cho sửa luôn vì ProductReview chưa có cột ngày tạo
+        CanEdit = true,
+        EditDeadline = (DateTime?)null
+    };
+}
+public async Task UpdateReviewAsync(string orderId, long userId, AddReviewDto dto)
+{
+    if (dto == null)
+        throw new Exception("Dữ liệu đánh giá không hợp lệ.");
+
+    if (dto.Rating < 1 || dto.Rating > 5)
+        throw new Exception("Số sao đánh giá phải từ 1 đến 5.");
+
+    if (string.IsNullOrWhiteSpace(dto.Comment))
+        throw new Exception("Vui lòng nhập nội dung đánh giá.");
+
+    var order = await _db.Orders
+        .FirstOrDefaultAsync(o => o.OrderCode == orderId && o.UserId == userId);
+
+    if (order == null)
+        throw new Exception("Không tìm thấy đơn hàng hoặc đơn hàng không thuộc về bạn.");
+
+    var review = await _db.ProductReviews
+        .FirstOrDefaultAsync(r => r.OrderId == order.Id && r.UserId == userId);
+
+    if (review == null)
+        throw new Exception("Bạn chưa đánh giá đơn hàng này.");
+
+    review.Rating = dto.Rating;
+    review.Comment = dto.Comment;
+
     await _db.SaveChangesAsync();
 }
     }

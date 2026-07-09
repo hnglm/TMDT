@@ -88,6 +88,8 @@ const mapBackendOrderToFrontend = (o: any): Order => {
     status: statusMap[o.orderStatus] || "pending",
     trackingSteps: [],
     paymentStatus: o.paymentStatus === "PAID" ? "Đã thanh toán" : "Chưa thanh toán",
+    hasReturnRequest: o.hasReturnRequest ?? o.HasReturnRequest ?? false,
+    hasReview: o.hasReview ?? o.HasReview ?? false,
   };
 };
 

@@ -36,4 +36,7 @@ public partial class ReturnWarrantyRequest
     public virtual OrderItem OrderItem { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;
+    public string? AccountInfo { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow.AddHours(7);
 }

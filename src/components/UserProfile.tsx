@@ -60,6 +60,37 @@ const cancelReasons = [
     "Đặt nhầm/trùng đơn",
     "Không muốn mua nữa"
   ];
+const [selectedReturnReason, setSelectedReturnReason] = useState<string>("");
+const [customReturnReason, setCustomReturnReason] = useState<string>("");
+
+const returnReasons = [
+  "Sản phẩm bị lỗi hoặc hư hỏng",
+  "Sản phẩm không đúng mô tả",
+  "Giao sai sản phẩm",
+  "Sản phẩm bị trầy xước khi nhận",
+  "Thiếu phụ kiện / thiếu linh kiện",
+  "Muốn yêu cầu bảo hành",
+  "Lý do khác"
+];
+const [reviewedOrderIds, setReviewedOrderIds] = useState<string[]>([]);
+const [isReviewEditMode, setIsReviewEditMode] = useState(false);
+const [currentReviewCanEdit, setCurrentReviewCanEdit] = useState(true);
+const [currentReviewProductId, setCurrentReviewProductId] = useState<string | null>(null);
+useEffect(() => {
+  const reviewedIds = orders
+    .filter((order: any) => order.hasReview || order.HasReview)
+    .map((order) => order.id);
+
+  setReviewedOrderIds(reviewedIds);
+}, [orders]);
+const [returnRequestedOrderIds, setReturnRequestedOrderIds] = useState<string[]>([]);
+useEffect(() => {
+  const requestedIds = orders
+    .filter((order: any) => order.hasReturnRequest || order.HasReturnRequest)
+    .map((order) => order.id);
+
+  setReturnRequestedOrderIds(requestedIds);
+}, [orders]);
   // Đổ dữ liệu tài khoản khi currentUser thay đổi trạng thái đăng nhập
   useEffect(() => {
     if (currentUser) {
@@ -217,7 +248,7 @@ const cancelReasons = [
               {orders.length > 0 ? (
                 <div className="space-y-6" id="orders-list-profile">
                   <div className="overflow-x-auto rounded-2xl border border-[#EADBC8]">
-                    <table className="w-full min-w-[900px] text-xs">
+                    <table className="w-full min-w-[1050px] text-xs">
                       <thead className="bg-[#FAF6F0] text-[#5C4033] uppercase tracking-wider">
                         <tr>
                           <th className="px-4 py-3 text-left font-bold">Mã đơn</th>
@@ -226,7 +257,9 @@ const cancelReasons = [
                           <th className="px-4 py-3 text-right font-bold">Giá trị</th>
                           <th className="px-4 py-3 text-center font-bold">Thanh toán</th>
                           <th className="px-4 py-3 text-center font-bold">Trạng thái</th>
-                          <th className="px-4 py-3 text-center font-bold">Thao tác</th>
+                          <th className="px-4 py-3 text-center font-bold">Hủy</th>
+                          <th className="px-4 py-3 text-center font-bold">Đánh giá</th>
+                          <th className="px-4 py-3 text-center font-bold">Hoàn hàng</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -265,42 +298,94 @@ const cancelReasons = [
                                 {getOrderStatusText(order.status)}
                               </span>
                             </td>
-                            <td className="px-4 py-4 text-center">
-  {order.status === "pending" ? (
-    // TH: Đơn hàng đang chờ - Cho phép Hủy
+                            {/* Cột Hủy */}
+<td className="px-4 py-4 text-center">
+  {order.status?.toLowerCase() === "pending" ? (
     <button
+      type="button"
       onClick={() => {
         setSelectedOrder(order);
         setIsCancelModalOpen(true);
       }}
-      className="text-[10px] text-red-500 hover:text-red-700 font-bold underline cursor-pointer"
+      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold uppercase text-[10px] cursor-pointer"
     >
       Hủy đơn
     </button>
-  ) : order.status === "completed" ? (
-    // TH: Đơn hàng đã hoàn tất - Cho phép Đánh giá & Hoàn hàng
-    <div className="flex flex-col gap-1.5">
-      <button 
-        onClick={() => {
-          setSelectedOrder(order);
-          setIsReviewModalOpen(true);
-        }}
-        className="text-[10px] text-blue-600 hover:underline font-bold uppercase"
-      >
-        Đánh giá
-      </button>
-      <button 
-        onClick={() => {
-          setSelectedOrder(order);
-          setIsReturnModalOpen(true);
-        }}
-        className="text-[10px] text-red-600 hover:underline font-bold uppercase"
-      >
-        Hoàn hàng
-      </button>
-    </div>
   ) : (
-    // TH: Đang vận chuyển hoặc trạng thái khác - Không cho thao tác
+    <span className="text-[10px] text-[#8B7E74]">-</span>
+  )}
+</td>
+
+{/* Cột Đánh giá */}
+<td className="px-4 py-4 text-center">
+  {reviewedOrderIds.includes(order.id) ||
+  (order as any).hasReview ||
+  (order as any).HasReview ? (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          setSelectedOrder(order);
+
+          const review = await orderApi.getMyReview(order.id);
+
+          setNewReviewRating(review.rating ?? review.Rating ?? 5);
+          setNewReviewComment(review.comment ?? review.Comment ?? "");
+          setCurrentReviewCanEdit(review.canEdit ?? review.CanEdit ?? false);
+          setCurrentReviewProductId(String(review.productId ?? review.ProductId ?? ""));
+
+          setIsReviewEditMode(true);
+          setIsReviewModalOpen(true);
+        } catch (err: any) {
+          console.error("Lỗi lấy đánh giá:", err);
+          alert(err.response?.data?.message || "Không tải được đánh giá.");
+        }
+      }}
+      className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 font-bold uppercase text-[10px] cursor-pointer"
+    >
+      Xem/Sửa
+    </button>
+  ) : ["completed", "delivered"].includes(order.status?.toLowerCase()) ? (
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedOrder(order);
+        setIsReviewEditMode(false);
+        setCurrentReviewCanEdit(true);
+        setCurrentReviewProductId(null);
+        setNewReviewRating(5);
+        setNewReviewComment("");
+        setIsReviewModalOpen(true);
+      }}
+      className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 font-bold uppercase text-[10px] cursor-pointer"
+    >
+      Đánh giá
+    </button>
+  ) : (
+    <span className="text-[10px] text-[#8B7E74]">-</span>
+  )}
+</td>
+
+{/* Cột Hoàn hàng */}
+<td className="px-4 py-4 text-center">
+  {returnRequestedOrderIds.includes(order.id) ||
+  (order as any).hasReturnRequest ||
+  (order as any).HasReturnRequest ? (
+    <span className="inline-flex px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold uppercase text-[10px]">
+      Đã gửi yêu cầu
+    </span>
+  ) : ["completed", "delivered"].includes(order.status?.toLowerCase()) ? (
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedOrder(order);
+        setIsReturnModalOpen(true);
+      }}
+      className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 font-bold uppercase text-[10px] cursor-pointer"
+    >
+      Hoàn hàng
+    </button>
+  ) : (
     <span className="text-[10px] text-[#8B7E74]">-</span>
   )}
 </td>
@@ -509,6 +594,239 @@ const cancelReasons = [
     </div>
   </div>
 )}
+{/* Modal Đánh giá */}
+{isReviewModalOpen && selectedOrder && (
+  <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+    <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl">
+      <h3 className="font-bold text-lg mb-4 text-[#1A1A1A]">
+  {isReviewEditMode ? "Xem / Sửa đánh giá" : "Đánh giá đơn hàng"} {selectedOrder.id}
+</h3>
+
+      <div className="mb-4">
+        <p className="text-xs text-gray-500 mb-2">Số sao đánh giá:</p>
+        <select
+  value={newReviewRating}
+  disabled={isReviewEditMode && !currentReviewCanEdit}
+  onChange={(e) => setNewReviewRating(Number(e.target.value))}
+  className="w-full border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37] disabled:bg-gray-100 disabled:text-gray-500"
+>
+          <option value={5}>5 sao - Rất hài lòng</option>
+          <option value={4}>4 sao - Hài lòng</option>
+          <option value={3}>3 sao - Bình thường</option>
+          <option value={2}>2 sao - Chưa hài lòng</option>
+          <option value={1}>1 sao - Không hài lòng</option>
+        </select>
+      </div>
+
+      <div>
+        <p className="text-xs text-gray-500 mb-2">Nội dung đánh giá:</p>
+        <textarea
+  value={newReviewComment}
+  disabled={isReviewEditMode && !currentReviewCanEdit}
+  onChange={(e) => setNewReviewComment(e.target.value)}
+  placeholder="Nhập cảm nhận của bạn về sản phẩm..."
+  className="w-full h-24 border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37] disabled:bg-gray-100 disabled:text-gray-500"
+/>
+      </div>
+      {isReviewEditMode && !currentReviewCanEdit && (
+  <p className="mt-2 text-[11px] text-red-600 font-semibold">
+    Đánh giá này đã quá thời hạn chỉnh sửa 7 ngày. Bạn chỉ có thể xem lại nội dung.
+  </p>
+)}
+
+      <div className="flex gap-2 mt-4">
+        <button
+          type="button"
+          onClick={() => {
+            setIsReviewModalOpen(false);
+            setNewReviewComment("");
+            setNewReviewRating(5);
+          }}
+          className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold uppercase text-xs hover:bg-gray-300"
+        >
+          Đóng
+        </button>
+
+        <button
+  type="button"
+  disabled={isReviewEditMode && !currentReviewCanEdit}
+  onClick={async () => {
+    if (!newReviewComment.trim()) {
+      alert("Vui lòng nhập nội dung đánh giá!");
+      return;
+    }
+
+    const firstItem: any = selectedOrder.items?.[0];
+
+    const productId =
+      currentReviewProductId ||
+      firstItem?.productId ||
+      firstItem?.id ||
+      firstItem?.product?.id;
+
+    if (!productId) {
+      alert("Không tìm thấy sản phẩm trong đơn hàng để đánh giá!");
+      return;
+    }
+
+    try {
+      if (isReviewEditMode) {
+        await orderApi.updateReview(selectedOrder.id, {
+          productId: String(productId),
+          rating: newReviewRating,
+          comment: newReviewComment
+        });
+
+        alert("Đã cập nhật đánh giá thành công!");
+      } else {
+        await orderApi.addReview(selectedOrder.id, {
+          productId: String(productId),
+          rating: newReviewRating,
+          comment: newReviewComment
+        });
+
+        setReviewedOrderIds((prev) =>
+          prev.includes(selectedOrder.id) ? prev : [...prev, selectedOrder.id]
+        );
+
+        onAddReviewToProduct(
+          String(productId),
+          newReviewRating,
+          newReviewComment,
+          currentUser.name
+        );
+
+        alert("Đã gửi đánh giá thành công!");
+      }
+
+      setIsReviewModalOpen(false);
+      setIsReviewEditMode(false);
+      setCurrentReviewCanEdit(true);
+      setCurrentReviewProductId(null);
+      setNewReviewComment("");
+      setNewReviewRating(5);
+    } catch (err: any) {
+      console.error("Lỗi gửi/cập nhật đánh giá:", err);
+      console.error("Backend response:", err.response?.data);
+
+      alert(
+        err.response?.data?.message ||
+        "Thao tác đánh giá thất bại. Vui lòng kiểm tra API."
+      );
+    }
+  }}
+  className="flex-1 py-2 bg-blue-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+>
+  {isReviewEditMode ? "Lưu chỉnh sửa" : "Gửi đánh giá"}
+</button>
+      </div>
+    </div>
+  </div>
+)}
+    {/* Modal Hoàn hàng / Bảo hành */}
+{isReturnModalOpen && selectedOrder && (
+  <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4">
+    <div className="bg-white p-6 rounded-2xl w-full max-w-sm shadow-xl">
+      <h3 className="font-bold text-lg mb-4 text-[#1A1A1A]">
+        Hoàn hàng / Bảo hành đơn {selectedOrder.id}
+      </h3>
+
+      {/* 1. Danh sách lý do có sẵn */}
+      <div className="space-y-2 mb-4">
+        <p className="text-xs text-gray-500 mb-2">
+          Chọn lý do hoàn hàng / bảo hành:
+        </p>
+
+        {returnReasons.map((reason) => (
+          <label
+            key={reason}
+            className="flex items-center gap-2 text-sm cursor-pointer hover:text-[#D4AF37]"
+          >
+            <input
+              type="radio"
+              name="returnReason"
+              value={reason}
+              checked={selectedReturnReason === reason}
+              onChange={(e) => setSelectedReturnReason(e.target.value)}
+            />
+            {reason}
+          </label>
+        ))}
+      </div>
+
+      {/* 2. Phần nhập lý do chi tiết */}
+      <div className="mt-4">
+        <p className="text-xs text-gray-500 mb-2">
+          Mô tả chi tiết thêm:
+        </p>
+
+        <textarea
+          value={customReturnReason}
+          onChange={(e) => setCustomReturnReason(e.target.value)}
+          placeholder="Ví dụ: Sản phẩm bị trầy ở mặt bàn, thiếu ốc lắp ráp, giao sai màu..."
+          className="w-full h-24 border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37]"
+        />
+      </div>
+
+      <div className="flex gap-2 mt-4">
+        <button
+          type="button"
+          onClick={() => {
+            setIsReturnModalOpen(false);
+            setSelectedReturnReason("");
+            setCustomReturnReason("");
+            setIsReviewModalOpen(false);
+  setIsReviewEditMode(false);
+  setCurrentReviewCanEdit(true);
+  setCurrentReviewProductId(null);
+  setNewReviewComment("");
+  setNewReviewRating(5);
+          }}
+          className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold uppercase text-xs hover:bg-gray-300"
+        >
+          Đóng
+        </button>
+
+        <button
+          type="button"
+          onClick={async () => {
+            const finalReturnReason = selectedReturnReason
+              ? `${selectedReturnReason}${customReturnReason ? " - " + customReturnReason : ""}`
+              : customReturnReason;
+
+            if (!finalReturnReason.trim()) {
+              alert("Vui lòng chọn hoặc nhập lý do hoàn hàng / bảo hành!");
+              return;
+            }
+
+            try {
+              await orderApi.requestReturnWarranty(selectedOrder.id, {
+                reason: finalReturnReason,
+                accountInfo: currentUser.email
+              });
+              setReturnRequestedOrderIds((prev) =>
+              prev.includes(selectedOrder.id) ? prev : [...prev, selectedOrder.id]
+            );
+
+              alert("Đã gửi yêu cầu hoàn hàng / bảo hành thành công!");
+
+              setIsReturnModalOpen(false);
+              setSelectedReturnReason("");
+              setCustomReturnReason("");
+            } catch (err) {
+              console.error("Lỗi gửi yêu cầu hoàn hàng / bảo hành:", err);
+              alert("Gửi yêu cầu thất bại. Vui lòng kiểm tra lại API.");
+            }
+          }}
+          className="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-red-700"
+        >
+          Gửi yêu cầu
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
