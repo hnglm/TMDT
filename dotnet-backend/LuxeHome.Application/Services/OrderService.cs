@@ -273,7 +273,8 @@ public async Task AddReviewAsync(string orderId, long userId, AddReviewDto dto)
         UserId = userId,
         Rating = dto.Rating,
         Comment = dto.Comment,
-        CreatedAt = DateTime.UtcNow.AddHours(7)
+        //CreatedAt = DateTime.UtcNow.AddHours(7),
+        ImageUrl = dto.ImageUrl
     };
 
     _db.ProductReviews.Add(review);
@@ -300,6 +301,7 @@ public async Task<object> GetMyReviewAsync(string orderId, long userId)
         review.ProductId,
         review.Rating,
         Comment = review.Comment,
+        ImageUrl = review.ImageUrl,
 
         // Tạm thời cho sửa luôn vì ProductReview chưa có cột ngày tạo
         CanEdit = true,
@@ -331,6 +333,10 @@ public async Task UpdateReviewAsync(string orderId, long userId, AddReviewDto dt
 
     review.Rating = dto.Rating;
     review.Comment = dto.Comment;
+    if (!string.IsNullOrWhiteSpace(dto.ImageUrl))
+    {
+        review.ImageUrl = dto.ImageUrl;
+    }
 
     await _db.SaveChangesAsync();
 }

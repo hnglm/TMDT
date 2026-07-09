@@ -43,6 +43,9 @@ const [reviewingProductId, setReviewingProductId] = useState<string | null>(null
 const [newReviewRating, setNewReviewRating] = useState(5);
 const [newReviewComment, setNewReviewComment] = useState("");
 const [reviewedProductIds, setReviewedProductIds] = useState<string[]>([]);
+const [reviewImage, setReviewImage] = useState<File | null>(null);
+const [reviewImagePreview, setReviewImagePreview] = useState<string>("");
+const [currentReviewImageUrl, setCurrentReviewImageUrl] = useState<string>("");
 
 // --- Trạng thái Đơn hàng (Hủy, Hoàn, Chọn đơn) ---
 const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -154,6 +157,11 @@ useEffect(() => {
     if (status === "completed") return "Hoàn tất";
     return "Đã hủy";
   };
+  const getReviewImageSrc = (url: string) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `http://localhost:5200${url}`;
+};
 
   const handleSaveInfo = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,13 +337,24 @@ useEffect(() => {
 
           const review = await orderApi.getMyReview(order.id);
 
-          setNewReviewRating(review.rating ?? review.Rating ?? 5);
-          setNewReviewComment(review.comment ?? review.Comment ?? "");
-          setCurrentReviewCanEdit(review.canEdit ?? review.CanEdit ?? false);
-          setCurrentReviewProductId(String(review.productId ?? review.ProductId ?? ""));
+console.log("REVIEW DETAIL:", review);
 
-          setIsReviewEditMode(true);
-          setIsReviewModalOpen(true);
+const imageUrl = review.imageUrl ?? review.ImageUrl ?? "";
+
+console.log("IMAGE URL:", imageUrl);
+console.log("IMAGE SRC:", imageUrl ? getReviewImageSrc(imageUrl) : "");
+
+setNewReviewRating(review.rating ?? review.Rating ?? 5);
+setNewReviewComment(review.comment ?? review.Comment ?? "");
+setCurrentReviewCanEdit(review.canEdit ?? review.CanEdit ?? false);
+setCurrentReviewProductId(String(review.productId ?? review.ProductId ?? ""));
+
+setCurrentReviewImageUrl(imageUrl);
+setReviewImage(null);
+setReviewImagePreview(imageUrl ? getReviewImageSrc(imageUrl) : "");
+
+setIsReviewEditMode(true);
+setIsReviewModalOpen(true);
         } catch (err: any) {
           console.error("Lỗi lấy đánh giá:", err);
           alert(err.response?.data?.message || "Không tải được đánh giá.");
@@ -350,12 +369,17 @@ useEffect(() => {
       type="button"
       onClick={() => {
         setSelectedOrder(order);
-        setIsReviewEditMode(false);
-        setCurrentReviewCanEdit(true);
-        setCurrentReviewProductId(null);
-        setNewReviewRating(5);
-        setNewReviewComment("");
-        setIsReviewModalOpen(true);
+setIsReviewEditMode(false);
+setCurrentReviewCanEdit(true);
+setCurrentReviewProductId(null);
+setNewReviewRating(5);
+setNewReviewComment("");
+
+setReviewImage(null);
+setReviewImagePreview("");
+setCurrentReviewImageUrl("");
+
+setIsReviewModalOpen(true);
       }}
       className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 font-bold uppercase text-[10px] cursor-pointer"
     >
@@ -627,6 +651,46 @@ useEffect(() => {
   placeholder="Nhập cảm nhận của bạn về sản phẩm..."
   className="w-full h-24 border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37] disabled:bg-gray-100 disabled:text-gray-500"
 />
+<div className="mt-4">
+  <p className="text-xs text-gray-500 mb-2">Ảnh đánh giá sản phẩm:</p>
+
+  <input
+    type="file"
+    accept="image/*"
+    disabled={isReviewEditMode && !currentReviewCanEdit}
+    onChange={(e) => {
+      const file = e.target.files?.[0];
+
+      if (!file) {
+        setReviewImage(null);
+        setReviewImagePreview(
+          currentReviewImageUrl ? getReviewImageSrc(currentReviewImageUrl) : ""
+        );
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        alert("Ảnh không được vượt quá 5MB.");
+        e.target.value = "";
+        return;
+      }
+
+      setReviewImage(file);
+      setReviewImagePreview(URL.createObjectURL(file));
+    }}
+    className="w-full text-xs border border-[#EADBC8] rounded-xl p-2 disabled:bg-gray-100 disabled:text-gray-500"
+  />
+
+  {reviewImagePreview && (
+    <div className="mt-3">
+      <img
+        src={reviewImagePreview}
+        alt="Ảnh đánh giá"
+        className="w-full max-h-48 object-cover rounded-xl border border-[#EADBC8]"
+      />
+    </div>
+  )}
+</div>
       </div>
       {isReviewEditMode && !currentReviewCanEdit && (
   <p className="mt-2 text-[11px] text-red-600 font-semibold">
@@ -639,8 +703,15 @@ useEffect(() => {
           type="button"
           onClick={() => {
             setIsReviewModalOpen(false);
-            setNewReviewComment("");
-            setNewReviewRating(5);
+setIsReviewEditMode(false);
+setCurrentReviewCanEdit(true);
+setCurrentReviewProductId(null);
+setNewReviewComment("");
+setNewReviewRating(5);
+
+setReviewImage(null);
+setReviewImagePreview("");
+setCurrentReviewImageUrl("");
           }}
           className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold uppercase text-xs hover:bg-gray-300"
         >
@@ -674,7 +745,9 @@ useEffect(() => {
         await orderApi.updateReview(selectedOrder.id, {
           productId: String(productId),
           rating: newReviewRating,
-          comment: newReviewComment
+          comment: newReviewComment,
+          image: reviewImage
+
         });
 
         alert("Đã cập nhật đánh giá thành công!");
@@ -682,7 +755,9 @@ useEffect(() => {
         await orderApi.addReview(selectedOrder.id, {
           productId: String(productId),
           rating: newReviewRating,
-          comment: newReviewComment
+          comment: newReviewComment,
+          image: reviewImage
+
         });
 
         setReviewedOrderIds((prev) =>
@@ -698,7 +773,9 @@ useEffect(() => {
 
         alert("Đã gửi đánh giá thành công!");
       }
-
+      setReviewImage(null);
+      setReviewImagePreview("");
+      setCurrentReviewImageUrl("");
       setIsReviewModalOpen(false);
       setIsReviewEditMode(false);
       setCurrentReviewCanEdit(true);

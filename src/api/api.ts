@@ -66,9 +66,19 @@ getMyReview: async (orderId: string) => {
 
 updateReview: async (
   orderId: string,
-  data: { productId: string; rating: number; comment: string }
+  data: { productId: string; rating: number; comment: string; image?: File | null }
 ) => {
-  const response = await api.put(`/api/orders/${orderId}/review`, data);
+  const formData = new FormData();
+
+  formData.append("ProductId", data.productId);
+  formData.append("Rating", String(data.rating));
+  formData.append("Comment", data.comment);
+
+  if (data.image) {
+    formData.append("image", data.image);
+  }
+
+  const response = await api.put(`/api/orders/${orderId}/review`, formData);
   return response.data;
 },
   // --- BỔ SUNG MỚI ---
@@ -84,12 +94,23 @@ updateReview: async (
   return response.data;
 },
 
-  // 2. Gửi đánh giá cho sản phẩm trong đơn hàng
-  // Backend sẽ nhận: { OrderId, ProductId, Rating, Comment } (sau khi qua PascalCase interceptor)
-  addReview: async (orderId: string, data: { productId: string; rating: number; comment: string }) => {
-    const response = await api.post(`/api/orders/${orderId}/review`, data);
-    return response.data;
-  },
+  addReview: async (
+  orderId: string,
+  data: { productId: string; rating: number; comment: string; image?: File | null }
+) => {
+  const formData = new FormData();
+
+  formData.append("ProductId", data.productId);
+  formData.append("Rating", String(data.rating));
+  formData.append("Comment", data.comment);
+
+  if (data.image) {
+    formData.append("image", data.image);
+  }
+
+  const response = await api.post(`/api/orders/${orderId}/review`, formData);
+  return response.data;
+},
 
   // 3. Yêu cầu hoàn hàng
   // Backend sẽ nhận: { Reason }

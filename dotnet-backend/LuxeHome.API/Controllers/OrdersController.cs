@@ -10,10 +10,12 @@ namespace LuxeHome.API.Controllers
     public class OrdersController : ControllerBase
     {
         private readonly OrderService _orderService;
+        private readonly IWebHostEnvironment _env;
 
-        public OrdersController(OrderService orderService)
+        public OrdersController(OrderService orderService, IWebHostEnvironment env)
         {
             _orderService = orderService;
+            _env = env;
         }
 
         [HttpPost]
@@ -116,12 +118,17 @@ public async Task<IActionResult> RequestReturn(string id, [FromBody] ReturnWarra
 }
 [HttpPost("{id}/review")]
 [Authorize]
-public async Task<IActionResult> AddReview(string id, [FromBody] AddReviewDto dto)
+public async Task<IActionResult> AddReview(
+    string id,
+    [FromForm] AddReviewDto dto,
+    [FromForm] IFormFile? image)
 {
     try
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        dto.ImageUrl = await SaveReviewImageAsync(image);
 
         await _orderService.AddReviewAsync(id, long.Parse(userIdClaim), dto);
 
@@ -159,12 +166,22 @@ public async Task<IActionResult> GetMyReview(string id)
 
 [HttpPut("{id}/review")]
 [Authorize]
-public async Task<IActionResult> UpdateReview(string id, [FromBody] AddReviewDto dto)
+public async Task<IActionResult> UpdateReview(
+    string id,
+    [FromForm] AddReviewDto dto,
+    [FromForm] IFormFile? image)
 {
     try
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        var imageUrl = await SaveReviewImageAsync(image);
+
+        if (!string.IsNullOrWhiteSpace(imageUrl))
+        {
+            dto.ImageUrl = imageUrl;
+        }
 
         await _orderService.UpdateReviewAsync(id, long.Parse(userIdClaim), dto);
 
@@ -172,8 +189,45 @@ public async Task<IActionResult> UpdateReview(string id, [FromBody] AddReviewDto
     }
     catch (Exception ex)
     {
-        return BadRequest(new { message = ex.Message });
+        Console.WriteLine("UPDATE REVIEW ERROR: " + ex);
+
+        return BadRequest(new
+        {
+            message = ex.Message,
+            detail = ex.InnerException?.Message
+        });
     }
+}
+private async Task<string?> SaveReviewImageAsync(IFormFile? image)
+{
+    if (image == null || image.Length == 0)
+        return null;
+
+    var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+    var ext = Path.GetExtension(image.FileName).ToLowerInvariant();
+
+    if (!allowedExtensions.Contains(ext))
+        throw new Exception("Chỉ hỗ trợ ảnh .jpg, .jpeg, .png, .webp.");
+
+    if (image.Length > 5 * 1024 * 1024)
+        throw new Exception("Ảnh đánh giá không được vượt quá 5MB.");
+
+    var webRoot = _env.WebRootPath;
+    if (string.IsNullOrWhiteSpace(webRoot))
+    {
+        webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    }
+
+    var uploadDir = Path.Combine(webRoot, "uploads", "reviews");
+    Directory.CreateDirectory(uploadDir);
+
+    var fileName = $"{Guid.NewGuid():N}{ext}";
+    var filePath = Path.Combine(uploadDir, fileName);
+
+    using var stream = new FileStream(filePath, FileMode.Create);
+    await image.CopyToAsync(stream);
+
+    return $"/uploads/reviews/{fileName}";
 }
     }
 }
