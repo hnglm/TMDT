@@ -10,6 +10,8 @@ namespace LuxeHome.Application.DTOs
         public string Description { get; set; }
         public string Material { get; set; }
         public int? WarrantyMonths { get; set; }
+        public int Stock { get; set; }
+        public int TotalStock { get; set; }
         
         public string? Status { get; set; }
         public string? MetaTitle { get; set; }
@@ -41,5 +43,6 @@ namespace LuxeHome.Application.DTOs
         public string Color { get; set; }
         public long Id { get; set; }
         public string Sku { get; set; }
+        public int StockQuantity { get; set; }
     }
 }

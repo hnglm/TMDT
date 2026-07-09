@@ -15,7 +15,6 @@ public class ProductsController : ControllerBase
         _context = context;
     }
 
-    // 1. Lấy danh sách sản phẩm CÓ PHÂN TRANG VÀ TÌM KIẾM
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] int page = 1, 
@@ -62,7 +61,15 @@ public class ProductsController : ControllerBase
                 Description = p.Description,
                 Material = p.Material,
                 WarrantyMonths = p.WarrantyMonths,
-                // 👑 MỚI: TRẢ VỀ THÊM TRẠNG THÁI VÀ SEO ĐỂ HIỂN THỊ LÊN FORM EDIT
+
+                Stock = _context.InventoryStocks
+                    .Where(s => s.ProductId == p.Id)
+                    .Sum(s => s.QuantityAvailable ?? 0),
+
+                TotalStock = _context.InventoryStocks
+                    .Where(s => s.ProductId == p.Id)
+                    .Sum(s => s.QuantityAvailable ?? 0),
+
                 Status = p.Status,
                 MetaTitle = p.MetaTitle,
                 MetaDescription = p.MetaDescription,
@@ -76,14 +83,18 @@ public class ProductsController : ControllerBase
                     .Select(img => new ProductImageDto { ImageUrl = img.ImageUrl })
                     .ToList(),
                 ProductVariants = p.ProductVariants
-                    .Select(v => new ProductVariantDto 
-                    { 
-                        Id = v.Id,   
-                        Sku = v.Sku,
-                        CurrentPrice = v.CurrentPrice, 
-                        Color = v.Color 
-                    })
-                    .ToList()
+    .Select(v => new ProductVariantDto 
+    { 
+        Id = v.Id,   
+        Sku = v.Sku,
+        CurrentPrice = v.CurrentPrice, 
+        Color = v.Color,
+
+        StockQuantity = _context.InventoryStocks
+            .Where(s => s.VariantId == v.Id)
+            .Sum(s => s.QuantityAvailable ?? 0)
+    })
+    .ToList()
             })
             .ToListAsync();
 

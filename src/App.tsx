@@ -270,41 +270,62 @@ const savedRole = sessionStorage.getItem("user_role");
   }, []);
 
   const mapBackendProductsToFrontend = useCallback((productList: any[]) => {
-    const mappedProducts = productList.map((item: any) => {
-      const mappedImages = item.productImages && item.productImages.length > 0
+  const mappedProducts = productList.map((item: any) => {
+    const variants = item.productVariants || item.ProductVariants || [];
+
+    const mappedImages =
+      item.productImages && item.productImages.length > 0
         ? item.productImages.map((img: any) => img.imageUrl)
         : ["https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&q=80&w=800"];
 
-      const currentPrice = item.productVariants && item.productVariants.length > 0
-        ? item.productVariants[0].currentPrice
+    const currentPrice =
+      variants.length > 0
+        ? variants[0].currentPrice ?? variants[0].CurrentPrice
         : 15000000;
 
-      return {
-        id: item.id.toString(),
-        name: item.productName || "Sản phẩm chưa cập nhật",
-        price: currentPrice,
-        rating: item.averageRating || 5,
-        category: item.category?.slug || "phong-khach",
-        categoryName: item.category?.categoryName || "Phòng Khách",
-        style: item.style || "Modern",
-        images: mappedImages,
-        description: item.shortDescription || "",
-        longDescription: item.description || "",
-        material: item.material || "Gỗ tự nhiên cao cấp",
-        dimensions: "Kích thước tiêu chuẩn",
-        colors: item.productVariants?.map((v:any) => v.color).filter(Boolean) || ["Mặc định"],
-        features: ["Bảo hành LuxeHome"],
-        warranty: `${item.warrantyMonths || 12} tháng`,
-        stock: 10,
-        brand: "LuxeHome",
-        status: item.status || "ACTIVE",
-        reviews: []
-      };
-    });
+    const stock = Number(
+      item.stock ??
+      item.Stock ??
+      item.totalStock ??
+      item.TotalStock ??
+      item.stockQuantity ??
+      item.StockQuantity ??
+      variants[0]?.stock ??
+      variants[0]?.Stock ??
+      variants[0]?.stockQuantity ??
+      variants[0]?.StockQuantity ??
+      variants[0]?.quantity ??
+      variants[0]?.Quantity ??
+      0
+    );
 
-    return mappedProducts.filter((p: any) => p.status !== "INACTIVE");
-  }, []);
+    console.log("PRODUCT STOCK:", item.productName || item.ProductName, stock, item);
 
+    return {
+      id: item.id.toString(),
+      name: item.productName || item.ProductName || "Sản phẩm chưa cập nhật",
+      price: currentPrice,
+      rating: item.averageRating || item.AverageRating || 5,
+      category: item.category?.slug || item.Category?.Slug || "phong-khach",
+      categoryName: item.category?.categoryName || item.Category?.CategoryName || "Phòng Khách",
+      style: item.style || item.Style || "Modern",
+      images: mappedImages,
+      description: item.shortDescription || item.ShortDescription || "",
+      longDescription: item.description || item.Description || "",
+      material: item.material || item.Material || "Gỗ tự nhiên cao cấp",
+      dimensions: "Kích thước tiêu chuẩn",
+      colors: variants.map((v: any) => v.color || v.Color).filter(Boolean) || ["Mặc định"],
+      features: ["Bảo hành LuxeHome"],
+      warranty: `${item.warrantyMonths || item.WarrantyMonths || 12} tháng`,
+      stock,
+      brand: "LuxeHome",
+      status: item.status || item.Status || "ACTIVE",
+      reviews: []
+    };
+  });
+
+  return mappedProducts.filter((p: any) => p.status !== "INACTIVE");
+}, []);
   const fetchCatalogProducts = useCallback((page: number) => {
     setIsCatalogLoading(true);
     fetch(`http://localhost:5200/api/products?page=${page}&pageSize=${PRODUCT_PAGE_SIZE}`)
@@ -393,34 +414,99 @@ const savedRole = sessionStorage.getItem("user_role");
   setActiveTab("home");
 };
 
-  const handleAddToCart = (product: Product, quantity: number, color: string, assemble: boolean) => {
-    setCart((prevCart) => {
-      const existingIndex = prevCart.findIndex(
-        (item) => item.product.id === product.id && item.selectedColor === color
-      );
-      if (existingIndex > -1) {
-        const updated = [...prevCart];
-        updated[existingIndex].quantity += quantity;
-        updated[existingIndex].assembleService = updated[existingIndex].assembleService || assemble;
-        return updated;
-      }
-      return [
-        ...prevCart,
-        {
-          product,
-          quantity,
-          selectedColor: color,
-          selectedMaterial: product.material.split(",")[0],
-          assembleService: assemble,
-        },
-      ];
-    });
-  };
+  const handleAddToCart = (
+  product: Product,
+  quantity: number,
+  color: string,
+  assemble: boolean
+) => {
+  const stock = Number(product.stock ?? 0);
+  const addQuantity = Math.max(1, quantity);
 
+  if (stock <= 0) {
+    alert("Sản phẩm này hiện đã hết hàng.");
+    return;
+  }
+
+  setCart((prevCart) => {
+    const existingIndex = prevCart.findIndex(
+      (item) => item.product.id === product.id && item.selectedColor === color
+    );
+
+    // Tổng số lượng sản phẩm này hiện đang có trong giỏ
+    const currentTotalQuantity = prevCart
+      .filter((item) => item.product.id === product.id)
+      .reduce((total, item) => total + item.quantity, 0);
+
+    const nextTotalQuantity = currentTotalQuantity + addQuantity;
+
+    if (nextTotalQuantity > stock) {
+      alert(`Không thể thêm vượt quá tồn kho. Sản phẩm này chỉ còn ${stock} sản phẩm.`);
+      return prevCart;
+    }
+
+    if (existingIndex > -1) {
+      const updated = [...prevCart];
+
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        quantity: updated[existingIndex].quantity + addQuantity,
+        assembleService: updated[existingIndex].assembleService || assemble,
+      };
+
+      return updated;
+    }
+
+    return [
+      ...prevCart,
+      {
+        product,
+        quantity: addQuantity,
+        selectedColor: color,
+        selectedMaterial: product.material.split(",")[0],
+        assembleService: assemble,
+      },
+    ];
+  });
+};
   const handleUpdateCartQuantity = (productId: string, quantity: number) => {
-    setCart((prevCart) => prevCart.map((item) => (item.product.id === productId ? { ...item, quantity } : item)));
-  };
+  const nextQuantity = Math.max(1, Number(quantity) || 1);
+  let hasShownAlert = false;
 
+  setCart((prevCart) =>
+    prevCart.map((item) => {
+      if (item.product.id !== productId) return item;
+
+      const stock = Number(item.product.stock ?? 0);
+
+      if (stock <= 0) {
+        if (!hasShownAlert) {
+          alert("Sản phẩm này hiện đã hết hàng.");
+          hasShownAlert = true;
+        }
+
+        return item;
+      }
+
+      if (nextQuantity > stock) {
+        if (!hasShownAlert) {
+          alert(`Không thể chọn quá tồn kho. Sản phẩm này chỉ còn ${stock} sản phẩm.`);
+          hasShownAlert = true;
+        }
+
+        return {
+          ...item,
+          quantity: stock,
+        };
+      }
+
+      return {
+        ...item,
+        quantity: nextQuantity,
+      };
+    })
+  );
+};
   const handleRemoveCartItem = (productId: string) => {
     setCart((prevCart) => prevCart.filter((item) => item.product.id !== productId));
   };
