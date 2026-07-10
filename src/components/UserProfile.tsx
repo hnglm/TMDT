@@ -35,7 +35,15 @@ const [phone, setPhone] = useState(currentUser?.phone || "");
 // --- Trạng thái Sổ địa chỉ ---
 const [addresses, setAddresses] = useState<any[]>([]);
 const [loadingAddresses, setLoadingAddresses] = useState(false);
+const [editingAddressId, setEditingAddressId] = useState<number | string | null>(null);
+const [isSavingAddress, setIsSavingAddress] = useState(false);
 
+const [addressForm, setAddressForm] = useState({
+  receiverName: "",
+  receiverPhone: "",
+  fullAddress: "",
+  isDefault: false,
+});
 // --- Trạng thái Đánh giá ---
 const [isSavedInfo, setIsSavedInfo] = useState(false);
 const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -103,22 +111,99 @@ useEffect(() => {
     }
   }, [currentUser]);
 
-  // Mỗi khi người dùng bấm qua Tab "Cài đặt & Sổ địa chỉ", hệ thống tự động bốc dữ liệu từ Postgres lên
-  useEffect(() => {
-    if (profileSubTab === "info" && currentUser) {
-      setLoadingAddresses(true);
-      authApi.getAddresses()
-        .then((data) => {
-          setAddresses(data);
-        })
-        .catch((err) => {
-          console.error("Lỗi bốc danh sách địa chỉ từ Database:", err);
-        })
-        .finally(() => {
-          setLoadingAddresses(false);
-        });
+  const loadAddresses = async () => {
+  if (!currentUser) return;
+
+  try {
+    setLoadingAddresses(true);
+
+    const data = await authApi.getAddresses();
+
+    const addressList =
+      Array.isArray(data)
+        ? data
+        : data.items || data.Items || [];
+
+    setAddresses(addressList);
+  } catch (err) {
+    console.error("Lỗi tải danh sách địa chỉ:", err);
+  } finally {
+    setLoadingAddresses(false);
+  }
+};
+
+useEffect(() => {
+  if (profileSubTab === "info" && currentUser) {
+    loadAddresses();
+  }
+}, [profileSubTab, currentUser]);
+
+const handleEditAddress = (addr: any) => {
+  setEditingAddressId(addr.id ?? addr.Id);
+
+  setAddressForm({
+    receiverName: addr.receiverName ?? addr.ReceiverName ?? "",
+    receiverPhone: addr.receiverPhone ?? addr.ReceiverPhone ?? "",
+    fullAddress: addr.fullAddress ?? addr.FullAddress ?? "",
+    isDefault: Boolean(addr.isDefault ?? addr.IsDefault ?? false),
+  });
+};
+
+const handleCancelEditAddress = () => {
+  setEditingAddressId(null);
+  setAddressForm({
+    receiverName: "",
+    receiverPhone: "",
+    fullAddress: "",
+    isDefault: false,
+  });
+};
+
+const handleSaveAddress = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!addressForm.receiverName.trim()) {
+    alert("Vui lòng nhập tên người nhận.");
+    return;
+  }
+
+  if (!addressForm.receiverPhone.trim()) {
+    alert("Vui lòng nhập số điện thoại người nhận.");
+    return;
+  }
+
+  if (!addressForm.fullAddress.trim()) {
+    alert("Vui lòng nhập địa chỉ giao hàng.");
+    return;
+  }
+
+  try {
+    setIsSavingAddress(true);
+
+    const payload = {
+      receiverName: addressForm.receiverName.trim(),
+      receiverPhone: addressForm.receiverPhone.trim(),
+      fullAddress: addressForm.fullAddress.trim(),
+      isDefault: addressForm.isDefault,
+    };
+
+    if (editingAddressId) {
+      await authApi.updateAddress(editingAddressId, payload);
+      alert("Đã cập nhật địa chỉ giao hàng.");
+    } else {
+      await authApi.createAddress(payload);
+      alert("Đã thêm địa chỉ giao hàng mới.");
     }
-  }, [profileSubTab, currentUser]);
+
+    handleCancelEditAddress();
+    await loadAddresses();
+  } catch (err) {
+    console.error("Lỗi lưu địa chỉ:", err);
+    alert("Lưu địa chỉ thất bại. Vui lòng thử lại.");
+  } finally {
+    setIsSavingAddress(false);
+  }
+};
 
   if (!currentUser) {
     return (
@@ -525,35 +610,165 @@ setIsReviewModalOpen(true);
                 </button>
               </form>
 
-              {/* Đổ danh sách Sổ địa chỉ lấy Real-time từ PostgreSQL */}
-              <div className="space-y-4 max-w-xl">
-                <h4 className="font-serif text-sm font-bold text-[#5C4033] flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-[#D4AF37]" /> 2. Sổ địa chỉ nhận hàng từ hệ thống Database
-                </h4>
-                
-                {loadingAddresses ? (
-                  <p className="text-xs text-[#8B7E74] italic">Đang tải sổ địa chỉ nhận hàng từ database PostgreSQL...</p>
-                ) : addresses.length > 0 ? (
-                  <div className="space-y-3">
-                    {addresses.map((addr: any) => (
-                      <div key={addr.id} className="p-4 bg-[#FAF6F0]/50 rounded-xl border border-[#EADBC8] text-xs flex justify-between items-start">
-                        <div className="space-y-1">
-                          <p className="font-bold text-[#1A1A1A]">Người nhận: {addr.receiverName} ({addr.receiverPhone})</p>
-                          <p className="text-[#5C4033]">Địa chỉ giao: {addr.fullAddress}</p>
-                          {addr.isDefault && (
-                            <span className="inline-block mt-1 text-[9px] uppercase font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              Mặc định nhận thiết kế
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-[#8B7E74] italic">Tài khoản này chưa có bản ghi sổ địa chỉ nào trong database.</p>
-                )}
-              </div>
+              {/* Danh sách Sổ địa chỉ */}{/* Sổ địa chỉ giao hàng */}
+<div className="space-y-4 max-w-xl">
+  <h4 className="font-serif text-sm font-bold text-[#5C4033] flex items-center gap-2">
+    <MapPin className="w-4 h-4 text-[#D4AF37]" />
+    2. Sổ địa chỉ giao hàng
+  </h4>
 
+  <form
+    onSubmit={handleSaveAddress}
+    className="space-y-3 rounded-xl border border-[#EADBC8] bg-[#FAF6F0]/50 p-4"
+  >
+    <div>
+      <label className="block text-[10px] text-[#8B7E74] uppercase mb-1">
+        Người nhận *
+      </label>
+      <input
+        type="text"
+        required
+        value={addressForm.receiverName}
+        onChange={(e) =>
+          setAddressForm((prev) => ({
+            ...prev,
+            receiverName: e.target.value,
+          }))
+        }
+        className="w-full bg-white p-2.5 rounded-lg border border-[#EADBC8] text-xs"
+        placeholder="Ví dụ: Nguyễn Văn A"
+      />
+    </div>
+
+    <div>
+      <label className="block text-[10px] text-[#8B7E74] uppercase mb-1">
+        Số điện thoại *
+      </label>
+      <input
+        type="tel"
+        required
+        value={addressForm.receiverPhone}
+        onChange={(e) =>
+          setAddressForm((prev) => ({
+            ...prev,
+            receiverPhone: e.target.value,
+          }))
+        }
+        className="w-full bg-white p-2.5 rounded-lg border border-[#EADBC8] text-xs"
+        placeholder="Ví dụ: 0901234567"
+      />
+    </div>
+
+    <div>
+      <label className="block text-[10px] text-[#8B7E74] uppercase mb-1">
+        Địa chỉ giao hàng *
+      </label>
+      <textarea
+        required
+        rows={3}
+        value={addressForm.fullAddress}
+        onChange={(e) =>
+          setAddressForm((prev) => ({
+            ...prev,
+            fullAddress: e.target.value,
+          }))
+        }
+        className="w-full bg-white p-2.5 rounded-lg border border-[#EADBC8] text-xs resize-none"
+        placeholder="Ví dụ: 123 Nguyễn Trãi, Phường Bến Thành, Quận 1, TP.HCM"
+      />
+    </div>
+
+    <label className="flex items-center gap-2 text-xs text-[#5C4033] font-semibold cursor-pointer">
+      <input
+        type="checkbox"
+        checked={addressForm.isDefault}
+        onChange={(e) =>
+          setAddressForm((prev) => ({
+            ...prev,
+            isDefault: e.target.checked,
+          }))
+        }
+      />
+      Đặt làm địa chỉ mặc định
+    </label>
+
+    <div className="flex gap-2">
+      <button
+        type="submit"
+        disabled={isSavingAddress}
+        className="px-5 py-2 rounded-lg bg-[#5C4033] hover:bg-[#4A3B32] text-white font-bold uppercase text-xs transition-colors disabled:opacity-60"
+      >
+        {isSavingAddress
+          ? "Đang lưu..."
+          : editingAddressId
+            ? "Cập nhật địa chỉ"
+            : "Thêm địa chỉ"}
+      </button>
+
+      {editingAddressId && (
+        <button
+          type="button"
+          onClick={handleCancelEditAddress}
+          className="px-5 py-2 rounded-lg bg-white border border-[#EADBC8] text-[#5C4033] font-bold uppercase text-xs hover:bg-[#FAF6F0]"
+        >
+          Hủy sửa
+        </button>
+      )}
+    </div>
+  </form>
+
+  {loadingAddresses ? (
+    <p className="text-xs text-[#8B7E74] italic">
+      Đang tải sổ địa chỉ nhận hàng từ database PostgreSQL...
+    </p>
+  ) : addresses.length > 0 ? (
+    <div className="space-y-3">
+      {addresses.map((addr: any) => {
+        const addressId = addr.id ?? addr.Id;
+        const receiverName = addr.receiverName ?? addr.ReceiverName ?? "Chưa cập nhật";
+        const receiverPhone = addr.receiverPhone ?? addr.ReceiverPhone ?? "Chưa cập nhật";
+        const fullAddress = addr.fullAddress ?? addr.FullAddress ?? "Chưa cập nhật";
+        const isDefault = addr.isDefault ?? addr.IsDefault ?? false;
+
+        return (
+          <div
+            key={addressId}
+            className="p-4 bg-[#FAF6F0]/50 rounded-xl border border-[#EADBC8] text-xs flex justify-between gap-4 items-start"
+          >
+            <div className="space-y-1">
+              <p className="font-bold text-[#1A1A1A]">
+                Người nhận: {receiverName} ({receiverPhone})
+              </p>
+
+              <p className="text-[#5C4033]">
+                Địa chỉ giao: {fullAddress}
+              </p>
+
+              {isDefault && (
+                <span className="inline-block mt-1 text-[9px] uppercase font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                  Mặc định
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleEditAddress(addr)}
+              className="shrink-0 px-3 py-1.5 rounded-lg bg-white text-[#5C4033] border border-[#EADBC8] hover:bg-[#F4EBE1] font-bold uppercase text-[10px]"
+            >
+              Sửa
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  ) : (
+    <p className="text-xs text-[#8B7E74] italic">
+      Chưa có địa chỉ giao hàng. Hãy thêm địa chỉ đầu tiên.
+    </p>
+  )}
+</div>
+               
             </div>
           )}
 

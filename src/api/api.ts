@@ -22,13 +22,12 @@ const api = axios.create({
   },
 });
 
-// Transformer: Convert camelCase to PascalCase trước khi gửi
 api.interceptors.request.use((config) => {
-  if (config.data) {
+  if (config.data && !(config.data instanceof FormData)) {
     config.data = toPascalCase(config.data);
   }
-  
-  const token = sessionStorage.getItem('token');
+
+  const token = sessionStorage.getItem("token");
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -81,8 +80,7 @@ updateReview: async (
   const response = await api.put(`/api/orders/${orderId}/review`, formData);
   return response.data;
 },
-  // --- BỔ SUNG MỚI ---
-
+ 
   // 1. Lấy danh sách đơn hàng (để hiển thị trong UserProfile)
   getMyOrders: async () => {
     const response = await api.get('/api/orders/my-orders');
@@ -136,8 +134,31 @@ export const authApi = {
     return response.data;
   },
 
-  getAddresses: async () => {
-    const response = await api.get('/api/user/addresses');
+   getAddresses: async () => {
+    const response = await api.get("/api/user/addresses");
+    return response.data;
+  },
+
+  createAddress: async (data: {
+    receiverName: string;
+    receiverPhone: string;
+    fullAddress: string;
+    isDefault: boolean;
+  }) => {
+    const response = await api.post("/api/user/addresses", data);
+    return response.data;
+  },
+
+  updateAddress: async (
+    id: number | string,
+    data: {
+      receiverName: string;
+      receiverPhone: string;
+      fullAddress: string;
+      isDefault: boolean;
+    }
+  ) => {
+    const response = await api.put(`/api/user/addresses/${id}`, data);
     return response.data;
   },
 

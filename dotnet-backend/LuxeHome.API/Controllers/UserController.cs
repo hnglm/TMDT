@@ -325,6 +325,7 @@ public async Task<IActionResult> GoogleLogin([FromBody] SocialLoginRequest reque
             }
         }
 
+        
         [Authorize]
         [HttpPost("addresses")]
         [HttpPost("/user/addresses")]
@@ -340,7 +341,21 @@ public async Task<IActionResult> GoogleLogin([FromBody] SocialLoginRequest reque
                 return BadRequest(new { message = ex.Message });
             }
         }
-
+        [Authorize]
+        [HttpPut("addresses/{id}")]
+        [HttpPut("/user/addresses/{id}")]
+        public async Task<IActionResult> UpdateAddress(long id, [FromBody] AddressRequest request)
+        {
+            try
+            {
+                long userId = long.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+                return Ok(await _userUseCase.UpdateAddressAsync(userId, id, request));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
         [Authorize(Roles = "ADMIN,MANAGER")]
         [HttpGet("/api/admin/users")]
         public async Task<IActionResult> GetAllUsers()

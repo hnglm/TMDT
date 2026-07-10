@@ -47,6 +47,7 @@ namespace LuxeHome.Application.DTOs
         public string? Ward { get; set; }
         public string? AddressDetail { get; set; }
         public bool IsDefault { get; set; }
+        public string? FullAddress { get; set; }
     }
 
     public class UserResponse
@@ -58,7 +59,6 @@ namespace LuxeHome.Application.DTOs
         public string RoleCode { get; set; } = string.Empty;
         public string CreatedAt { get; set; } = string.Empty;
 
-        // 👑 BỔ SUNG THÊM TRƯỜNG NÀY ĐỂ FIX LỖI TRONG HÌNH:
         public string Status { get; set; } = "ACTIVE";
     }
 
@@ -66,7 +66,6 @@ namespace LuxeHome.Application.DTOs
     {
         public string RoleCode { get; set; } = string.Empty;
         
-        // 👑 ĐỒNG BỘ THÊM 3 TRƯỜNG NÀY ĐỂ FIX TRIỆT ĐỂ LỖI GẠCH ĐỎ:
         public string FullName { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
