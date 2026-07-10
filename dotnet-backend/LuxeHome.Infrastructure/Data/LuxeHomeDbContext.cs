@@ -55,6 +55,8 @@ public partial class LuxeHomeDbContext : DbContext
     public virtual DbSet<SlugRedirect> SlugRedirects { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+    
+    public virtual DbSet<CustomerPromotionWallet> CustomerPromotionWallets { get; set; }
 
     
 

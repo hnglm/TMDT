@@ -27,7 +27,7 @@ api.interceptors.request.use((config) => {
     config.data = toPascalCase(config.data);
   }
 
-  const token = sessionStorage.getItem("token");
+  const token = sessionStorage.getItem("token") || localStorage.getItem("token");
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -43,7 +43,7 @@ export const orderApi = {
     receiverPhone: string; 
     shippingAddress: string; 
     customerNote?: string;
-    couponCode?: string;
+    couponCode?: string | null;
     paymentMethod: string;
     items: { productId: number; variantId: number; quantity: number }[] 
     
@@ -173,6 +173,41 @@ export const authApi = {
   },
   googleLogin: async (data: { token: string }) => {
   const response = await api.post('/api/user/google-login', data);
+  return response.data;
+},
+
+};
+export const promotionApi = {
+  getAvailablePromotions: async () => {
+    const response = await api.get("/api/promotions/available");
+    return response.data;
+  },
+
+  getPromotions: async () => {
+    const response = await api.get("/api/promotions");
+    return response.data;
+  },
+
+  applyPromotion: async (data: {
+    couponCode: string;
+    subtotalAmount: number;
+    shippingFee: number;
+    installationFee: number;
+  }) => {
+    const response = await api.post("/api/promotions/apply", data);
+    return response.data;
+  },
+  savePromotion: async (data: { couponCode: string }) => {
+  const response = await api.post("/api/promotions/save", data);
+  return response.data;
+},
+
+getMyPromotions: async (params?: {
+  subtotalAmount?: number;
+  shippingFee?: number;
+  installationFee?: number;
+}) => {
+  const response = await api.get("/api/promotions/my", { params });
   return response.data;
 },
 };

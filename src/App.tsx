@@ -13,9 +13,12 @@ import UserProfile from "./components/UserProfile";
 import AdminPanel from "./components/AdminPanel";
 import ProductDetailModal from "./components/ProductDetailModal";
 import CartSidebar from "./components/CartSidebar";
+import PromotionsPage from "./components/PromotionsPage";
+import HomePromotions from "./components/HomePromotions";
 const AuthModal = lazy(() => import("./components/AuthModal"));
 import ChatbotWidget from "./components/ChatbotWidget";
 import { useEffect } from "react";
+
 // Types
 import { Product, Combo, CartItem, Order, ConsultationSchedule, Coupon } from "./types";
 import { orderApi } from "./api/api";
@@ -256,7 +259,7 @@ const savedRole = sessionStorage.getItem("user_role");
 }, []);
 
   useEffect(() => {
-    fetch('/api/promotions')
+    fetch("http://localhost:5200/api/promotions")
     .then(res => {
       if (!res.ok) throw new Error("Lỗi mạng khi lấy Coupons");
       return res.json();
@@ -770,21 +773,30 @@ const savedRole = sessionStorage.getItem("user_role");
 
       <main className="flex-1 pb-16">
         {activeTab === "home" && (
-          <HomeView
-            products={products}
-            combos={combos}
-            blogs={blogs}
-            onSelectProduct={(p) => setSelectedProductForDetail(p)}
-            onSelectCombo={(c) => {
-              const matchedItems = c.productIds.map((id) => products.find((p) => p.id === id)).filter((p): p is Product => !!p);
-              handleAddComboToCart(c, matchedItems);
-            }}
-            onNavigateToCatalog={handleNavigateToCatalogWithFilters}
-            onNavigateToDesign={() => setActiveTab("design")}
-            onToggleWishlist={handleToggleWishlist}
-            wishlist={wishlist}
-          />
-        )}
+  <>
+    <HomeView
+      products={products}
+      combos={combos}
+      blogs={blogs}
+      onSelectProduct={(p) => setSelectedProductForDetail(p)}
+      onSelectCombo={(c) => {
+        const matchedItems = c.productIds
+          .map((id) => products.find((p) => p.id === id))
+          .filter((p): p is Product => !!p);
+
+        handleAddComboToCart(c, matchedItems);
+      }}
+      onNavigateToCatalog={handleNavigateToCatalogWithFilters}
+      onNavigateToDesign={() => setActiveTab("design")}
+      onToggleWishlist={handleToggleWishlist}
+      wishlist={wishlist}
+    />
+
+    <HomePromotions
+      onOpenPromotionsPage={() => setActiveTab("promotions")}
+    />
+  </>
+)}
 
         {activeTab === "catalog" && (
           <CatalogView
@@ -809,6 +821,12 @@ const savedRole = sessionStorage.getItem("user_role");
         {activeTab === "design" && (
           <DesignConsultation products={products} combos={combos} onAddSchedule={handleAddConsultationSchedule} onSelectProduct={(p) => setSelectedProductForDetail(p)} />
         )}
+        {activeTab === "promotions" && (
+        <PromotionsPage
+          currentUser={currentUser}
+          onOpenAuth={() => setIsAuthOpen(true)}
+        />
+      )}
 
         {(activeTab === "profile" || activeTab === "profile-wishlist") && (
           <UserProfile

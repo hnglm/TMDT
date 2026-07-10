@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { User, Phone, MapPin, Heart, ShoppingBag, Star, CheckCircle, RefreshCw, Sparkles } from "lucide-react";
 import { Order, Product } from "../types";
-import { authApi, orderApi } from "../api/api";
-interface UserProfileProps {
+import { User, Phone, MapPin, Heart, ShoppingBag, Star, CheckCircle, RefreshCw, Sparkles, Ticket } from "lucide-react";
+import { authApi, orderApi, promotionApi } from "../api/api";interface UserProfileProps {
   currentUser: { name: string; email: string; phone?: string } | null;
   onUpdatePersonalInfo: (name: string, email: string, phone?: string) => void;
   onCancelOrder?: (orderId: string) => void;
@@ -27,7 +26,7 @@ export default function UserProfile({
 }: UserProfileProps) {
   
   // --- Trạng thái Sub-tab & Thông tin cá nhân ---
-const [profileSubTab, setProfileSubTab] = useState<"info" | "orders" | "wishlist">("orders");
+const [profileSubTab, setProfileSubTab] = useState<"info" | "orders" | "wishlist" | "promotions">("orders");
 const [editedName, setEditedName] = useState(currentUser?.name || "");
 const [editedEmail, setEditedEmail] = useState(currentUser?.email || "");
 const [phone, setPhone] = useState(currentUser?.phone || "");
@@ -44,6 +43,10 @@ const [addressForm, setAddressForm] = useState({
   fullAddress: "",
   isDefault: false,
 });
+// --- Trạng thái Mã giảm giá của tôi ---
+const [myPromotions, setMyPromotions] = useState<any[]>([]);
+const [loadingMyPromotions, setLoadingMyPromotions] = useState(false);
+const [myPromotionMessage, setMyPromotionMessage] = useState("");
 // --- Trạng thái Đánh giá ---
 const [isSavedInfo, setIsSavedInfo] = useState(false);
 const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -204,6 +207,33 @@ const handleSaveAddress = async (e: React.FormEvent) => {
     setIsSavingAddress(false);
   }
 };
+  const loadMyPromotions = async () => {
+  if (!currentUser) return;
+
+  try {
+    setLoadingMyPromotions(true);
+    setMyPromotionMessage("");
+
+    const data = await promotionApi.getMyPromotions();
+
+    const promotionList = Array.isArray(data) ? data : data.items || data.Items || [];
+
+    setMyPromotions(promotionList);
+  } catch (err: any) {
+    console.error("Lỗi tải mã giảm giá của tôi:", err);
+    setMyPromotionMessage(
+      err.response?.data?.message || "Không tải được danh sách mã giảm giá của bạn."
+    );
+  } finally {
+    setLoadingMyPromotions(false);
+  }
+};
+
+useEffect(() => {
+  if (profileSubTab === "promotions" && currentUser) {
+    loadMyPromotions();
+  }
+}, [profileSubTab, currentUser]);
 
   if (!currentUser) {
     return (
@@ -301,6 +331,8 @@ const handleSaveAddress = async (e: React.FormEvent) => {
             {[
               { id: "orders", label: `Lịch sử đơn hàng (${orders.length})`, icon: ShoppingBag },
               { id: "wishlist", label: `Sản phẩm yêu thích (${wishlist.length})`, icon: Heart },
+              { id: "promotions", label: `Mã giảm giá của tôi (${myPromotions.length})`, icon: Ticket },
+
               { id: "info", label: "Cài đặt & Sổ địa chỉ", icon: MapPin },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -329,7 +361,141 @@ const handleSaveAddress = async (e: React.FormEvent) => {
 
         {/* Right column master workspace */}
         <div className="lg:col-span-8 bg-white rounded-2xl border border-[#EADBC8] p-6 md:p-8 shadow-sm">
-          
+          {/* Subtab: Mã giảm giá của tôi */}
+{profileSubTab === "promotions" && (
+  <div className="space-y-6" id="profile-promotions-view">
+    <div className="border-b border-[#EADBC8] pb-4">
+      <h3 className="font-serif text-lg font-bold text-[#1A1A1A]">
+        Mã Giảm Giá Của Tôi
+      </h3>
+      <p className="text-xs text-[#8B7E74]">
+        Những mã ưu đãi quý khách đã lưu từ Trung tâm mã giảm giá LuxeHome.
+      </p>
+    </div>
+
+    {myPromotionMessage && (
+      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+        {myPromotionMessage}
+      </div>
+    )}
+
+    <div className="rounded-2xl border border-[#EADBC8] bg-[#FAF6F0]/60 p-4">
+      <div className="flex items-start gap-3">
+        <div className="rounded-full bg-white border border-[#EADBC8] p-2">
+          <Ticket className="w-5 h-5 text-[#D4AF37]" />
+        </div>
+
+        <div>
+          <p className="text-sm font-bold text-[#5C4033]">
+            Cách nhận thêm mã ưu đãi
+          </p>
+          <p className="text-xs text-[#8B7E74] mt-1">
+            Vào menu <span className="font-bold text-[#5C4033]">Mã Giảm Giá</span> trên thanh điều hướng,
+            chọn mã phù hợp và bấm <span className="font-bold">Lưu mã</span>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {loadingMyPromotions ? (
+      <div className="text-sm text-[#8B7E74] italic">
+        Đang tải mã giảm giá của bạn...
+      </div>
+    ) : myPromotions.length === 0 ? (
+      <div className="rounded-2xl border border-dashed border-[#EADBC8] bg-[#FAF6F0] p-10 text-center">
+        <Ticket className="w-12 h-12 text-[#D4AF37] mx-auto mb-3" />
+        <p className="font-bold text-[#5C4033]">
+          Bạn chưa lưu mã giảm giá nào.
+        </p>
+        <p className="text-xs text-[#8B7E74] mt-1">
+          Hãy vào trang Mã Giảm Giá để lưu ưu đãi trước khi thanh toán.
+        </p>
+      </div>
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {myPromotions.map((promo: any) => {
+          const couponCode = promo.couponCode ?? promo.CouponCode ?? "";
+          const promotionName = promo.promotionName ?? promo.PromotionName ?? "Ưu đãi LuxeHome";
+          const promotionType = String(promo.promotionType ?? promo.PromotionType ?? "").toUpperCase();
+          const discountValue = Number(promo.discountValue ?? promo.DiscountValue ?? 0);
+          const minOrderAmount = Number(promo.minOrderAmount ?? promo.MinOrderAmount ?? 0);
+          const isUsable = promo.isUsable ?? promo.IsUsable ?? true;
+          const message = promo.message ?? promo.Message ?? "Đã lưu trong ví ưu đãi.";
+
+          const getTitle = () => {
+            if (promotionType === "PERCENT" || promotionType === "PERCENTAGE") {
+              return `Giảm ${discountValue}%`;
+            }
+
+            if (promotionType === "FIXED" || promotionType === "AMOUNT") {
+              return `Giảm ${formattedPrice(discountValue)}`;
+            }
+
+            if (promotionType === "FREESHIP" || promotionType === "FREE_SHIP") {
+              return "Miễn phí vận chuyển";
+            }
+
+            if (promotionType === "INSTALLATION") {
+              return "Hỗ trợ phí lắp ráp";
+            }
+
+            return "Ưu đãi LuxeHome";
+          };
+
+          return (
+            <div
+              key={couponCode}
+              className="relative overflow-hidden rounded-2xl border border-[#EADBC8] bg-white p-5 shadow-sm"
+            >
+              <div className="absolute top-0 left-0 h-full w-1.5 bg-[#D4AF37]" />
+
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-[#8B7E74] font-bold">
+                    Mã ưu đãi
+                  </p>
+                  <h4 className="font-serif text-xl font-black text-[#5C4033]">
+                    {couponCode}
+                  </h4>
+                </div>
+
+                <div className="rounded-full bg-[#FAF6F0] border border-[#EADBC8] p-2">
+                  <Ticket className="w-5 h-5 text-[#D4AF37]" />
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-1">
+                <p className="text-base font-black text-[#1A1A1A]">
+                  {getTitle()}
+                </p>
+                <p className="text-xs text-[#8B7E74]">
+                  {promotionName}
+                </p>
+
+                {minOrderAmount > 0 && (
+                  <p className="text-xs text-[#5C4033] pt-1">
+                    Đơn tối thiểu:{" "}
+                    <span className="font-bold">{formattedPrice(minOrderAmount)}</span>
+                  </p>
+                )}
+              </div>
+
+              <div
+                className={`mt-4 rounded-xl px-3 py-2 text-xs font-bold ${
+                  isUsable
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                }`}
+              >
+                {isUsable ? "Có thể sử dụng" : message}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+)}
           {/* Subtab: Lịch sử đơn hàng */}
           {profileSubTab === "orders" && (
             <div className="space-y-8" id="profile-orders-view">
