@@ -50,14 +50,19 @@ export interface CartItem {
 }
 
 export interface Order {
+  
   id: string;
   date: string;
   customerName: string;
   customerPhone: string;
+  hasReturnRequest?: boolean;
+  hasReview?: boolean;
   shippingAddress: {
-    city: string;
-    district: string;
-    addressDetail: string;
+  city: string;
+  district: string;
+  addressDetail: string;
+  
+
   };
   items: {
     productId: string;

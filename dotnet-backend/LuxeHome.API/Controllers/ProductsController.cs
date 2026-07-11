@@ -15,7 +15,6 @@ public class ProductsController : ControllerBase
         _context = context;
     }
 
-    // 1. Lấy danh sách sản phẩm CÓ PHÂN TRANG VÀ TÌM KIẾM
     [HttpGet]
     public async Task<IActionResult> GetProducts(
         [FromQuery] int page = 1, 
@@ -57,6 +56,12 @@ public class ProductsController : ControllerBase
                 Description = p.Description,
                 Material = p.Material,
                 WarrantyMonths = p.WarrantyMonths,
+
+                // Cùng 1 nguồn dữ liệu, gán vào cả 3 tên field để tương thích với mọi nơi đang đọc
+                Stock = p.InventoryStocks.Sum(s => (int?)s.QuantityAvailable) ?? 0,
+                TotalStock = p.InventoryStocks.Sum(s => (int?)s.QuantityAvailable) ?? 0,
+                StockQuantity = p.InventoryStocks.Sum(s => (int?)s.QuantityAvailable) ?? 0,
+
                 Status = p.Status,
                 MetaTitle = p.MetaTitle,
                 MetaDescription = p.MetaDescription,
@@ -75,10 +80,12 @@ public class ProductsController : ControllerBase
                         Id = v.Id,   
                         Sku = v.Sku,
                         CurrentPrice = v.CurrentPrice, 
-                        Color = v.Color 
+                        Color = v.Color,
+                        StockQuantity = _context.InventoryStocks
+                            .Where(s => s.VariantId == v.Id)
+                            .Sum(s => s.QuantityAvailable ?? 0)
                     })
-                    .ToList(),
-                    StockQuantity = p.InventoryStocks.Sum(s => (int?)s.QuantityAvailable) ?? 0
+                    .ToList()
             })
             .ToListAsync();
 
@@ -130,10 +137,6 @@ public class ProductsController : ControllerBase
                 }).ToList();
             }
 
-            // 👑 SỬA: LUÔN đảm bảo có ít nhất 1 variant (kể cả khi không nhập màu)
-            // để InventoryStock luôn có VariantId hợp lệ, tránh dữ liệu hỏng như sản phẩm #10
-            // 👑 SỬA: LUÔN đảm bảo có ít nhất 1 variant (kể cả khi không nhập màu)
-            // để InventoryStock luôn có VariantId hợp lệ, tránh dữ liệu hỏng như sản phẩm #10
             List<ProductVariant> productVariants;
 
             if (dto.Variants != null && dto.Variants.Any())
@@ -154,7 +157,7 @@ public class ProductsController : ControllerBase
                     {
                         VariantName = dto.ProductName + " - Mặc định",
                         Color = "Mặc định",
-                        CurrentPrice = 0, // Sản phẩm chưa nhập giá biến thể, Admin cần cập nhật giá sau
+                        CurrentPrice = 0,
                         Status = "ACTIVE"
                     }
                 };
@@ -163,7 +166,7 @@ public class ProductsController : ControllerBase
             product.ProductVariants = productVariants;
 
             _context.Products.Add(product);
-            await _context.SaveChangesAsync(); // Lưu để sinh Id cho product + từng variant
+            await _context.SaveChangesAsync();
 
             int stockPerVariant = product.ProductVariants.Count > 0
                 ? dto.InitialStock / product.ProductVariants.Count
@@ -174,7 +177,7 @@ public class ProductsController : ControllerBase
                 _context.InventoryStocks.Add(new InventoryStock
                 {
                     ProductId = product.Id,
-                    VariantId = variant.Id, // ✅ Luôn có variant hợp lệ
+                    VariantId = variant.Id,
                     QuantityAvailable = stockPerVariant,
                     QuantityOnHand = stockPerVariant,
                     QuantityReserved = 0,
@@ -197,7 +200,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 3. Xóa mềm sản phẩm
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteProduct(long id)
     {
@@ -217,7 +219,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 4. Cập nhật tồn kho nhanh (an toàn với sản phẩm chưa có InventoryStock)
     public class UpdateStockDto
     {
         public int NewStock { get; set; }
@@ -232,8 +233,6 @@ public class ProductsController : ControllerBase
 
             if (!stockRecords.Any())
             {
-                // 👑 SỬA: Nếu chưa có InventoryStock (sản phẩm dữ liệu cũ bị thiếu),
-                // tự tạo mới thay vì trả lỗi 404 để không chặn thao tác của Admin
                 var firstVariant = await _context.ProductVariants.FirstOrDefaultAsync(v => v.ProductId == id);
                 if (firstVariant == null)
                     return BadRequest(new { message = "Sản phẩm này chưa có biến thể (variant), không thể tạo tồn kho." });
@@ -269,7 +268,6 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 5. Cập nhật thông tin Sản phẩm
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateProduct(long id, [FromBody] UpdateProductDto dto)
     {
@@ -308,8 +306,6 @@ public class ProductsController : ControllerBase
                 }
             }
 
-            // 👑 SỬA: Nếu sản phẩm chưa có variant nào (dữ liệu cũ bị thiếu),
-            // tự tạo 1 variant mặc định thay vì bỏ qua trong im lặng
             ProductVariant? targetVariant = product.ProductVariants.FirstOrDefault();
             if (targetVariant == null)
             {
@@ -322,14 +318,13 @@ public class ProductsController : ControllerBase
                     Status = "ACTIVE"
                 };
                 _context.ProductVariants.Add(targetVariant);
-                await _context.SaveChangesAsync(); // cần Id trước khi tạo InventoryStock
+                await _context.SaveChangesAsync();
             }
             else
             {
                 targetVariant.CurrentPrice = dto.CurrentPrice;
             }
 
-            // 👑 SỬA: Cập nhật tồn kho theo VariantId cụ thể, tự tạo nếu chưa có
             var stockRecord = await _context.InventoryStocks
                 .FirstOrDefaultAsync(i => i.ProductId == id && i.VariantId == targetVariant.Id);
 

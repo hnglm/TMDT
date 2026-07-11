@@ -153,34 +153,107 @@ namespace LuxeHome.Application.UseCases
         }
 
         public async Task<CustomerAddress> AddAddressAsync(long userId, AddressRequest request)
-        {
-            if (request.IsDefault)
-            {
-                var defaults = await _context.CustomerAddresses
-                    .Where(a => a.UserId == userId && a.IsDefault == true)
-                    .ToListAsync();
-                foreach (var d in defaults) d.IsDefault = false;
-            }
+{
+    if (string.IsNullOrWhiteSpace(request.ReceiverName))
+        throw new Exception("Vui lòng nhập tên người nhận.");
 
-            var address = new CustomerAddress
-            {
-                UserId = userId,
-                ReceiverName = request.ReceiverName,
-                ReceiverPhone = request.ReceiverPhone,
-                Province = request.Province,
-                District = request.District,
-                Ward = request.Ward,
-                AddressDetail = request.AddressDetail,
-                FullAddress = $"{request.AddressDetail}, {request.Ward}, {request.District}, {request.Province}",
-                IsDefault = request.IsDefault,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+    if (string.IsNullOrWhiteSpace(request.ReceiverPhone))
+        throw new Exception("Vui lòng nhập số điện thoại người nhận.");
 
-            _context.CustomerAddresses.Add(address);
-            await _context.SaveChangesAsync();
-            return address;
-        }
+    var fullAddress = !string.IsNullOrWhiteSpace(request.FullAddress)
+        ? request.FullAddress.Trim()
+        : $"{request.AddressDetail}, {request.Ward}, {request.District}, {request.Province}"
+            .Replace(",,,", ",")
+            .Replace(",,", ",")
+            .Trim()
+            .Trim(',');
+
+    if (string.IsNullOrWhiteSpace(fullAddress))
+        throw new Exception("Vui lòng nhập địa chỉ giao hàng.");
+
+    if (request.IsDefault)
+    {
+        var defaults = await _context.CustomerAddresses
+            .Where(a => a.UserId == userId && a.IsDefault == true)
+            .ToListAsync();
+
+        foreach (var d in defaults)
+            d.IsDefault = false;
+    }
+
+    var address = new CustomerAddress
+    {
+        UserId = userId,
+        ReceiverName = request.ReceiverName.Trim(),
+        ReceiverPhone = request.ReceiverPhone.Trim(),
+        Province = request.Province,
+        District = request.District,
+        Ward = request.Ward,
+        AddressDetail = !string.IsNullOrWhiteSpace(request.AddressDetail)
+            ? request.AddressDetail.Trim()
+            : fullAddress,
+        FullAddress = fullAddress,
+        IsDefault = request.IsDefault,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    _context.CustomerAddresses.Add(address);
+    await _context.SaveChangesAsync();
+
+    return address;
+}
+public async Task<CustomerAddress> UpdateAddressAsync(long userId, long addressId, AddressRequest request)
+{
+    var address = await _context.CustomerAddresses
+        .FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId);
+
+    if (address == null)
+        throw new Exception("Không tìm thấy địa chỉ giao hàng hoặc địa chỉ không thuộc tài khoản của bạn.");
+
+    if (string.IsNullOrWhiteSpace(request.ReceiverName))
+        throw new Exception("Vui lòng nhập tên người nhận.");
+
+    if (string.IsNullOrWhiteSpace(request.ReceiverPhone))
+        throw new Exception("Vui lòng nhập số điện thoại người nhận.");
+
+    var fullAddress = !string.IsNullOrWhiteSpace(request.FullAddress)
+        ? request.FullAddress.Trim()
+        : $"{request.AddressDetail}, {request.Ward}, {request.District}, {request.Province}"
+            .Replace(",,,", ",")
+            .Replace(",,", ",")
+            .Trim()
+            .Trim(',');
+
+    if (string.IsNullOrWhiteSpace(fullAddress))
+        throw new Exception("Vui lòng nhập địa chỉ giao hàng.");
+
+    if (request.IsDefault)
+    {
+        var defaults = await _context.CustomerAddresses
+            .Where(a => a.UserId == userId && a.Id != addressId)
+            .ToListAsync();
+
+        foreach (var d in defaults)
+            d.IsDefault = false;
+    }
+
+    address.ReceiverName = request.ReceiverName.Trim();
+    address.ReceiverPhone = request.ReceiverPhone.Trim();
+    address.Province = request.Province;
+    address.District = request.District;
+    address.Ward = request.Ward;
+    address.AddressDetail = !string.IsNullOrWhiteSpace(request.AddressDetail)
+        ? request.AddressDetail.Trim()
+        : fullAddress;
+    address.FullAddress = fullAddress;
+    address.IsDefault = request.IsDefault;
+    address.UpdatedAt = DateTime.UtcNow;
+
+    await _context.SaveChangesAsync();
+
+    return address;
+}
 
         private string GenerateToken(User user)
         {

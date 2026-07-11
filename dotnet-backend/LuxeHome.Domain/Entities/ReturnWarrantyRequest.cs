@@ -20,6 +20,9 @@ public partial class ReturnWarrantyRequest
     public string? Reason { get; set; }
 
     public string? ImageUrl { get; set; }
+    public string? Description { get; set; }
+
+    public string? ImageUrls { get; set; }
 
     public decimal? RefundAmount { get; set; }
 
@@ -36,4 +39,7 @@ public partial class ReturnWarrantyRequest
     public virtual OrderItem OrderItem { get; set; } = null!;
 
     public virtual User User { get; set; } = null!;
+    public string? AccountInfo { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow.AddHours(7);
 }

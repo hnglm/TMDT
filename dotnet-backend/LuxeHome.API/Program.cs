@@ -13,6 +13,9 @@ using Hangfire;
 using Hangfire.PostgreSql;
 using LuxeHome.Application.Services;
 using LuxeHome.API.Configurations;
+using Microsoft.Extensions.FileProviders;
+
+
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 // Nạp GEMINI_API_KEY từ .env.local ở root repo (cùng file frontend đang dùng)
@@ -142,6 +145,7 @@ builder.Services.AddScoped<ImageSearchUseCase>();
 builder.Services.AddScoped<UserUseCase>(); 
 builder.Services.AddScoped<VnPayService>();
 builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<OrderService>();
 
 // appsettings có ApiKey: "" nên không dùng ?? — chuỗi rỗng vẫn “truthy” với null-coalescing
 var geminiKey = builder.Configuration["Gemini:ApiKey"];
@@ -162,6 +166,19 @@ builder.Services.AddCors(options =>
 });
 var app = builder.Build();
 app.UseCors("AllowAll");
+
+var rootWwwPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+Directory.CreateDirectory(rootWwwPath);
+Console.WriteLine("CURRENT DIRECTORY: " + Directory.GetCurrentDirectory());
+Console.WriteLine("STATIC WWWROOT PATH: " + rootWwwPath);
+Console.WriteLine("STATIC WWWROOT EXISTS: " + Directory.Exists(rootWwwPath));
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(rootWwwPath),
+    RequestPath = ""
+});
+
 app.UseRouting();
 
 if (app.Environment.IsDevelopment())
@@ -180,6 +197,41 @@ app.UseSwaggerUI(c =>
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseHangfireDashboard("/hangfire");
+app.MapGet("/uploads/reviews/{fileName}", (string fileName) =>
+{
+    var safeFileName = Path.GetFileName(fileName);
+
+    var filePath = Path.Combine(
+        Directory.GetCurrentDirectory(),
+        "wwwroot",
+        "uploads",
+        "reviews",
+        safeFileName
+    );
+
+    Console.WriteLine("REQUEST REVIEW IMAGE: " + filePath);
+
+    if (!System.IO.File.Exists(filePath))
+    {
+        return Results.NotFound(new
+        {
+            message = "Không tìm thấy ảnh",
+            path = filePath
+        });
+    }
+
+    var ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+    var contentType = ext switch
+    {
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        ".webp" => "image/webp",
+        _ => "application/octet-stream"
+    };
+
+    return Results.File(filePath, contentType);
+});
 app.MapControllers();
 
 using (var scope = app.Services.CreateScope())

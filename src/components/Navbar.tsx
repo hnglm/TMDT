@@ -1,7 +1,6 @@
 import React from "react";
-import { ShoppingBag, Heart, User, ShieldAlert, Sparkles, Compass, Layers } from "lucide-react";
-import { CartItem, Product } from "../types";
-
+import { ShoppingBag, Heart, User, ShieldAlert, Sparkles, Compass, Layers, Ticket } from "lucide-react";
+import { CartItem } from "../types";
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -70,10 +69,11 @@ export default function Navbar({
           {/* Nav Links */}
           <div className="hidden md:flex flex-1 items-center justify-between gap-1 mx-2 xl:mx-3 min-w-0 flex-nowrap 2xl:flex-none 2xl:justify-center 2xl:gap-1 2xl:mx-0" id="nav-links">
             {[
-              { id: "home", label: "Trang Chủ", icon: Compass },
-              { id: "catalog", label: "Sản phẩm", icon: ShoppingBag },
-              { id: "combos", label: "Combo Nội Thất", icon: Layers },
-              { id: "design", label: "Tư Vấn Thiết Kế", icon: Sparkles },
+               { id: "home", label: "Trang Chủ", icon: Compass },
+                { id: "promotions", label: "Mã Giảm Giá", icon: Ticket },
+                { id: "catalog", label: "Sản phẩm", icon: ShoppingBag },
+                { id: "combos", label: "Combo Nội Thất", icon: Layers },
+                { id: "design", label: "Tư Vấn Thiết Kế", icon: Sparkles },
             ].map((link) => {
               const Icon = link.icon;
               const isActive = activeTab === link.id;

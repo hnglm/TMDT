@@ -3,6 +3,7 @@ using System;
 using LuxeHome.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LuxeHome.LuxeHome.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(LuxeHomeDbContext))]
-    partial class LuxeHomeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260709073259_AddCommentCreatedAtToProductReview")]
+    partial class AddCommentCreatedAtToProductReview
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -249,40 +252,6 @@ namespace LuxeHome.LuxeHome.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("customer_addresses", (string)null);
-                });
-
-            modelBuilder.Entity("LuxeHome.Domain.Entities.CustomerPromotionWallet", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<long>("PromotionId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("promotion_id");
-
-                    b.Property<DateTime?>("SavedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("saved_at");
-
-                    b.Property<string>("Status")
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<DateTime?>("UsedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("used_at");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("customer_promotion_wallets");
                 });
 
             modelBuilder.Entity("LuxeHome.Domain.Entities.InventoryStock", b =>
@@ -1074,16 +1043,10 @@ namespace LuxeHome.LuxeHome.Infrastructure.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccountInfo")
-                        .HasColumnType("text")
-                        .HasColumnName("account_info");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text")
-                        .HasColumnName("description");
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long?>("HandledBy")
                         .HasColumnType("bigint")
@@ -1093,10 +1056,6 @@ namespace LuxeHome.LuxeHome.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("image_url");
-
-                    b.Property<string>("ImageUrls")
-                        .HasColumnType("text")
-                        .HasColumnName("image_urls");
 
                     b.Property<long>("OrderId")
                         .HasColumnType("bigint")

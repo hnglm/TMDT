@@ -32,4 +32,7 @@ public partial class ProductReview
     public virtual User User { get; set; } = null!;
 
     public virtual ProductVariant? Variant { get; set; }
+    public string Comment { get; set; } = string.Empty;
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow.AddHours(7);
 }

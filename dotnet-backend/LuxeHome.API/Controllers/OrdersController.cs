@@ -1,11 +1,11 @@
-using Microsoft.AspNetCore.Mvc;
 using LuxeHome.Application.DTOs;
 using LuxeHome.Application.Services;
-using Microsoft.EntityFrameworkCore;
 using LuxeHome.Infrastructure.Data;
 using LuxeHome.Domain.Entities;
-using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace LuxeHome.API.Controllers
 {
@@ -17,67 +17,51 @@ namespace LuxeHome.API.Controllers
         private readonly VnPayService _vnpay;
         private readonly LuxeHomeDbContext _db;
         private readonly InventoryService _inventoryService;
+        private readonly OrderService _orderService;
+        private readonly IWebHostEnvironment _env;
 
         public OrdersController(
             IConfiguration config,
             VnPayService vnpay,
             LuxeHomeDbContext db,
-            InventoryService inventoryService)
+            InventoryService inventoryService,
+            OrderService orderService,
+            IWebHostEnvironment env)
         {
             _config = config;
             _vnpay = vnpay;
             _db = db;
             _inventoryService = inventoryService;
+            _orderService = orderService;
+            _env = env;
         }
 
-        // 🆕 Đọc URL frontend từ appsettings.json (Frontend:BaseUrl)
-        // Fallback về localhost:3000 nếu chưa cấu hình, để không phá code cũ
         private string FrontendBaseUrl =>
             (_config["Frontend:BaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
 
+        // =========================================================================
+        // VNPAY — thanh toán online (giữ nguyên logic dùng trực tiếp _db)
+        // =========================================================================
         [HttpPost("create-payment-url")]
         public async Task<IActionResult> CreatePaymentUrl([FromBody] CreateOrderDto dto)
         {
             try
             {
                 if (dto == null)
-                {
                     return BadRequest(new { message = "Dữ liệu đơn hàng không hợp lệ." });
-                }
 
                 if (dto.TotalAmount <= 0)
-                {
-                    return BadRequest(new
-                    {
-                        message = "TotalAmount phải lớn hơn 0.",
-                        totalAmount = dto.TotalAmount
-                    });
-                }
+                    return BadRequest(new { message = "TotalAmount phải lớn hơn 0.", totalAmount = dto.TotalAmount });
 
                 if (dto.Items == null || dto.Items.Count == 0)
-                {
                     return BadRequest(new { message = "Đơn hàng trống. Vui lòng chọn sản phẩm." });
-                }
 
                 if (dto.UserId <= 0)
-                {
-                    return BadRequest(new
-                    {
-                        message = "UserId không hợp lệ. Cần đăng nhập trước khi thanh toán.",
-                        userId = dto.UserId
-                    });
-                }
+                    return BadRequest(new { message = "UserId không hợp lệ. Cần đăng nhập trước khi thanh toán.", userId = dto.UserId });
 
                 var userExists = await _db.Users.AnyAsync(u => u.Id == dto.UserId);
-
                 if (!userExists)
-                {
-                    return BadRequest(new
-                    {
-                        message = "Không tìm thấy người dùng trong database.",
-                        userId = dto.UserId
-                    });
-                }
+                    return BadRequest(new { message = "Không tìm thấy người dùng trong database.", userId = dto.UserId });
 
                 var orderItems = new List<OrderItem>();
                 decimal subtotal = 0;
@@ -98,131 +82,7 @@ namespace LuxeHome.API.Controllers
                         })
                         .FirstOrDefaultAsync();
 
-                    if (itemData == null)
-                        continue;
-
-                    decimal price = itemData.CurrentPrice ?? 0;
-                    int qty = it.Quantity > 0 ? it.Quantity : 1;
-                    decimal lineTotal = price * qty;
-                    subtotal += lineTotal;
-
-                    orderItems.Add(new OrderItem
-                    {
-                        ProductId = itemData.ProductId,
-                        VariantId = itemData.VariantId,
-                        ProductName = itemData.ProductName,
-                        Sku = itemData.Sku,
-                        Quantity = qty,
-                        OriginalPrice = price,
-                        SellingPrice = price,
-                        DiscountAmount = 0,
-                        TotalPrice = lineTotal,
-                        WarrantyMonths = itemData.WarrantyMonths
-                    });
-                }
-
-                if (orderItems.Count == 0)
-                {
-                    {
-                        return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
-                    }
-                }
-
-                string vnpayOrderId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-
-                var order = new Order
-                {
-                    OrderCode = vnpayOrderId,
-                    UserId = dto.UserId,
-
-                    ReceiverName = string.IsNullOrWhiteSpace(dto.ReceiverName) ? "Khách hàng" : dto.ReceiverName,
-                    ReceiverPhone = string.IsNullOrWhiteSpace(dto.ReceiverPhone) ? "0000000000" : dto.ReceiverPhone,
-                    ShippingAddress = string.IsNullOrWhiteSpace(dto.ShippingAddress) ? "Chưa cập nhật" : dto.ShippingAddress,
-                    CustomerNote = dto.CustomerNote,
-                    CouponCode = dto.CouponCode,
-
-                    SubtotalAmount = subtotal,
-                    DiscountAmount = 0,
-                    ShippingFee = dto.TotalAmount - subtotal > 0 ? dto.TotalAmount - subtotal : 0,
-                    FinalAmount = dto.TotalAmount,
-
-                    OrderStatus = "PENDING",
-                    PaymentStatus = "UNPAID",
-                    ShippingStatus = "PENDING",
-
-                    OrderItems = orderItems
-                };
-
-                _db.Orders.Add(order);
-                await _db.SaveChangesAsync();
-
-                string ipAddress = "127.0.0.1";
-
-                var paymentUrl = _vnpay.CreatePaymentUrl(
-                    dto.TotalAmount,
-                    vnpayOrderId,
-                    ipAddress,
-                    _config
-                );
-
-                Console.WriteLine("===== CREATE VNPAY PAYMENT =====");
-                Console.WriteLine("Order DB Id: " + order.Id);
-                Console.WriteLine("TotalAmount: " + dto.TotalAmount);
-                Console.WriteLine("VnpayOrderId: " + vnpayOrderId);
-                Console.WriteLine("PaymentUrl: " + paymentUrl);
-                Console.WriteLine("================================");
-
-                return Ok(new
-                {
-                    paymentUrl,
-                    orderId = vnpayOrderId,
-                    totalAmount = dto.TotalAmount
-                });
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("CREATE PAYMENT ERROR: " + ex.ToString());
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost]
-        [Authorize]
-        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-                if (string.IsNullOrEmpty(userIdClaim))
-                    return Unauthorized(new { message = "Bạn cần đăng nhập để đặt hàng." });
-
-                long userId = long.Parse(userIdClaim);
-
-                if (dto == null || dto.Items == null || dto.Items.Count == 0)
-                    return BadRequest(new { message = "Đơn hàng trống. Vui lòng chọn sản phẩm." });
-
-                var orderItems = new List<OrderItem>();
-                decimal subtotal = 0;
-                
-                foreach (var it in dto.Items)
-                {
-                    var itemData = await _db.ProductVariants
-                        .Where(v => v.ProductId == it.ProductId)
-                        .OrderByDescending(v => v.Id == it.VariantId)
-                        .Select(v => new
-                        {
-                            ProductId = v.ProductId,
-                            VariantId = v.Id,
-                            ProductName = v.Product.ProductName,
-                            Sku = v.Sku,
-                            CurrentPrice = v.CurrentPrice,
-                            WarrantyMonths = v.Product.WarrantyMonths
-                        })
-                        .FirstOrDefaultAsync();
-
-                    if (itemData == null)
-                        continue;
+                    if (itemData == null) continue;
 
                     decimal price = itemData.CurrentPrice ?? 0;
                     int qty = it.Quantity > 0 ? it.Quantity : 1;
@@ -247,48 +107,39 @@ namespace LuxeHome.API.Controllers
                 if (orderItems.Count == 0)
                     return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
 
-                decimal finalAmount = dto.TotalAmount > 0 ? dto.TotalAmount : subtotal;
+                string vnpayOrderId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
 
                 var order = new Order
                 {
-                    OrderCode = "LH" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString()
-                                + Random.Shared.Next(100, 999).ToString(),
-                    UserId = userId,
-
+                    OrderCode = vnpayOrderId,
+                    UserId = dto.UserId,
                     ReceiverName = string.IsNullOrWhiteSpace(dto.ReceiverName) ? "Khách hàng" : dto.ReceiverName,
                     ReceiverPhone = string.IsNullOrWhiteSpace(dto.ReceiverPhone) ? "0000000000" : dto.ReceiverPhone,
                     ShippingAddress = string.IsNullOrWhiteSpace(dto.ShippingAddress) ? "Chưa cập nhật" : dto.ShippingAddress,
                     CustomerNote = dto.CustomerNote,
                     CouponCode = dto.CouponCode,
-
                     SubtotalAmount = subtotal,
                     DiscountAmount = 0,
-                    ShippingFee = finalAmount - subtotal > 0 ? finalAmount - subtotal : 0,
-                    FinalAmount = finalAmount,
-
+                    ShippingFee = dto.TotalAmount - subtotal > 0 ? dto.TotalAmount - subtotal : 0,
+                    FinalAmount = dto.TotalAmount,
                     OrderStatus = "PENDING",
                     PaymentStatus = "UNPAID",
                     ShippingStatus = "PENDING",
-
                     OrderItems = orderItems
                 };
 
                 _db.Orders.Add(order);
                 await _db.SaveChangesAsync();
 
-                return Ok(new
-                {
-                    orderId = order.OrderCode,
-                    id = order.Id,
-                    totalAmount = order.FinalAmount,
-                    itemCount = orderItems.Count
-                });
+                string ipAddress = "127.0.0.1";
+                var paymentUrl = _vnpay.CreatePaymentUrl(dto.TotalAmount, vnpayOrderId, ipAddress, _config);
+
+                return Ok(new { paymentUrl, orderId = vnpayOrderId, totalAmount = dto.TotalAmount });
             }
             catch (Exception ex)
             {
-                Console.WriteLine("CREATE ORDER ERROR: " + ex.ToString());
-                var inner = ex.InnerException?.Message ?? ex.Message;
-                return BadRequest(new { message = ex.Message, detail = inner });
+                Console.WriteLine("CREATE PAYMENT ERROR: " + ex.ToString());
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -298,47 +149,21 @@ namespace LuxeHome.API.Controllers
             var query = Request.Query;
 
             if (!query.ContainsKey("vnp_SecureHash"))
-            {
                 return Ok("ReturnUrl VNPay hoạt động. Hãy thanh toán qua paymentUrl để VNPay redirect về đây.");
-            }
 
             string vnpHashSecret = _config["Vnpay:HashSecret"] ?? "";
-
             bool isValid = _vnpay.ValidateSignature(query, vnpHashSecret);
 
             if (!isValid)
-            {
-                Console.WriteLine("===== VNPAY RETURN INVALID SIGNATURE =====");
-                Console.WriteLine(Request.QueryString.ToString());
-                Console.WriteLine("==========================================");
-
                 return BadRequest("Chữ ký không hợp lệ!");
-            }
 
             string responseCode = query["vnp_ResponseCode"].ToString();
             string txnRef = query["vnp_TxnRef"].ToString();
-
-            Console.WriteLine("DEBUG: Đang tìm đơn hàng với OrderCode: " + txnRef);
             string amountRaw = query["vnp_Amount"].ToString();
-            string transactionNo = query["vnp_TransactionNo"].ToString();
 
-            Console.WriteLine("===== VNPAY RETURN VALID =====");
-            Console.WriteLine("ResponseCode: " + responseCode);
-            Console.WriteLine("TxnRef: " + txnRef);
-            Console.WriteLine("Amount: " + amountRaw);
-            Console.WriteLine("TransactionNo: " + transactionNo);
-            Console.WriteLine("==============================");
-
-            var order = await _db.Orders
-                .FirstOrDefaultAsync(o => o.OrderCode == txnRef);
-
+            var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderCode == txnRef);
             if (order == null)
-            {
-                Console.WriteLine("Không tìm thấy đơn hàng với TxnRef: " + txnRef);
-                var totalOrders = await _db.Orders.CountAsync();
-                Console.WriteLine($"DEBUG: Không tìm thấy. Tổng số đơn hàng trong DB: {totalOrders}");
                 return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=order-not-found");
-            }
 
             decimal vnpAmount = decimal.Parse(amountRaw, CultureInfo.InvariantCulture) / 100;
             decimal orderAmount = order.FinalAmount ?? 0;
@@ -347,9 +172,7 @@ namespace LuxeHome.API.Controllers
             {
                 order.PaymentStatus = "INVALID_AMOUNT";
                 order.OrderStatus = "PAYMENT_FAILED";
-
                 await _db.SaveChangesAsync();
-
                 return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=invalid-amount");
             }
 
@@ -358,15 +181,12 @@ namespace LuxeHome.API.Controllers
                 order.PaymentStatus = "PAID";
                 order.OrderStatus = "CONFIRMED";
                 order.ConfirmedAt = DateTime.UtcNow;
-
                 await _db.SaveChangesAsync();
-
                 return Redirect($"{FrontendBaseUrl}/checkout/success?orderId={txnRef}");
             }
 
             order.PaymentStatus = "FAILED";
             order.OrderStatus = "PAYMENT_FAILED";
-
             await _db.SaveChangesAsync();
 
             return Redirect($"{FrontendBaseUrl}/checkout/fail?orderId={txnRef}");
@@ -375,14 +195,44 @@ namespace LuxeHome.API.Controllers
         [HttpGet("test-vnpay")]
         public IActionResult TestVnPay()
         {
-            var paymentUrl = _vnpay.CreatePaymentUrl(
-                10000m,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
-                "127.0.0.1",
-                _config
-            );
-
+            var paymentUrl = _vnpay.CreatePaymentUrl(10000m, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(), "127.0.0.1", _config);
             return Ok(new { paymentUrl });
+        }
+
+        // =========================================================================
+        // TẠO ĐƠN HÀNG (COD) — dùng OrderService của bạn cùng nhóm
+        // =========================================================================
+        [HttpPost]
+        [Authorize]
+        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim))
+                    return Unauthorized(new { message = "Bạn cần đăng nhập để đặt hàng." });
+
+                long userId = long.Parse(userIdClaim);
+
+                string orderCode = "LH"
+                    + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    + Random.Shared.Next(100, 999);
+
+                var order = await _orderService.CreateOrderAsync(dto, userId, orderCode);
+
+                return Ok(new
+                {
+                    orderId = order.OrderCode,
+                    id = order.Id,
+                    totalAmount = order.FinalAmount,
+                    itemCount = order.OrderItems.Count
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("CREATE ORDER ERROR: " + ex);
+                return BadRequest(new { message = ex.Message, detail = ex.InnerException?.Message });
+            }
         }
 
         [HttpGet("my-orders")]
@@ -390,56 +240,181 @@ namespace LuxeHome.API.Controllers
         public async Task<IActionResult> GetMyOrders()
         {
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-            
-            if (string.IsNullOrEmpty(userIdClaim)) 
+            if (string.IsNullOrEmpty(userIdClaim))
                 return Unauthorized(new { message = "Bạn cần đăng nhập để xem đơn hàng." });
 
             long userId = long.Parse(userIdClaim);
-
-            var orders = await _db.Orders
-                .Where(o => o.UserId == userId)
-                .OrderByDescending(o => o.Id)
-                .Select(o => new
-                {
-                    o.Id,
-                    o.OrderCode,
-                    o.UserId,
-                    o.ReceiverName,
-                    o.ReceiverPhone,
-                    o.ShippingAddress,
-                    o.SubtotalAmount,
-                    o.DiscountAmount,
-                    o.ShippingFee,
-                    o.FinalAmount,
-                    o.OrderStatus,
-                    o.PaymentStatus,
-                    o.ShippingStatus,
-                    o.CouponCode,
-                    o.CustomerNote,
-                    o.ConfirmedAt,
-                    Items = o.OrderItems.Select(i => new
-                    {
-                        i.ProductId,
-                        i.VariantId,
-                        i.ProductName,
-                        i.Sku,
-                        i.Quantity,
-                        i.OriginalPrice,
-                        i.SellingPrice,
-                        i.TotalPrice
-                    }).ToList()
-                })
-                .ToListAsync();
+            var orders = await _orderService.GetMyOrdersAsync(userId);
 
             return Ok(orders);
         }
 
+        [HttpPost("{id}/cancel")]
+        [Authorize]
+        public async Task<IActionResult> CancelOrder(string id, [FromBody] CancelOrderDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+                long userId = long.Parse(userIdClaim);
+                await _orderService.CancelOrderAsync(id, userId, dto.Reason);
+
+                return Ok(new { message = "Đã hủy đơn thành công" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{id}/return")]
+        [Authorize]
+        public async Task<IActionResult> CreateReturnWarranty(string id, [FromForm] ReturnWarrantyDto dto)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+                dto.ImageUrls = await SaveReturnImagesAsync(dto.Images);
+                await _orderService.CreateReturnRequestAsync(id, long.Parse(userIdClaim), dto);
+
+                return Ok(new { message = "Yêu cầu hoàn hàng đã được ghi nhận.", imageUrls = dto.ImageUrls });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("RETURN REQUEST ERROR: " + ex);
+                return BadRequest(new { message = ex.Message, detail = ex.InnerException?.Message });
+            }
+        }
+
+        [HttpPost("{id}/review")]
+        [Authorize]
+        public async Task<IActionResult> AddReview(string id, [FromForm] AddReviewDto dto, [FromForm] IFormFile? image)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+                dto.ImageUrl = await SaveReviewImageAsync(image);
+                await _orderService.AddReviewAsync(id, long.Parse(userIdClaim), dto);
+
+                return Ok(new { message = "Đã gửi đánh giá thành công." });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("ADD REVIEW ERROR: " + ex);
+                return BadRequest(new { message = ex.Message, detail = ex.InnerException?.Message });
+            }
+        }
+
+        [HttpGet("{id}/review")]
+        [Authorize]
+        public async Task<IActionResult> GetMyReview(string id)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+                var review = await _orderService.GetMyReviewAsync(id, long.Parse(userIdClaim));
+                return Ok(review);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPut("{id}/review")]
+        [Authorize]
+        public async Task<IActionResult> UpdateReview(string id, [FromForm] AddReviewDto dto, [FromForm] IFormFile? image)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+                var imageUrl = await SaveReviewImageAsync(image);
+                if (!string.IsNullOrWhiteSpace(imageUrl)) dto.ImageUrl = imageUrl;
+
+                await _orderService.UpdateReviewAsync(id, long.Parse(userIdClaim), dto);
+
+                return Ok(new { message = "Đã cập nhật đánh giá thành công." });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("UPDATE REVIEW ERROR: " + ex);
+                return BadRequest(new { message = ex.Message, detail = ex.InnerException?.Message });
+            }
+        }
+
+        private async Task<string?> SaveReviewImageAsync(IFormFile? image)
+        {
+            if (image == null || image.Length == 0) return null;
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+            var ext = Path.GetExtension(image.FileName).ToLowerInvariant();
+            if (!allowedExtensions.Contains(ext))
+                throw new Exception("Chỉ hỗ trợ ảnh .jpg, .jpeg, .png, .webp.");
+            if (image.Length > 5 * 1024 * 1024)
+                throw new Exception("Ảnh đánh giá không được vượt quá 5MB.");
+
+            var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadDir = Path.Combine(webRoot, "uploads", "reviews");
+            Directory.CreateDirectory(uploadDir);
+
+            var fileName = $"{Guid.NewGuid():N}{ext}";
+            var filePath = Path.Combine(uploadDir, fileName);
+
+            using var stream = new FileStream(filePath, FileMode.Create);
+            await image.CopyToAsync(stream);
+
+            return $"/uploads/reviews/{fileName}";
+        }
+
+        private async Task<string?> SaveReturnImagesAsync(List<IFormFile>? images)
+        {
+            if (images == null || images.Count == 0) return null;
+            if (images.Count > 5) throw new Exception("Chỉ được tải tối đa 5 ảnh.");
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+            var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var uploadDir = Path.Combine(webRoot, "uploads", "returns");
+            Directory.CreateDirectory(uploadDir);
+
+            var imageUrls = new List<string>();
+
+            foreach (var image in images)
+            {
+                if (image == null || image.Length == 0) continue;
+
+                var ext = Path.GetExtension(image.FileName).ToLowerInvariant();
+                if (!allowedExtensions.Contains(ext))
+                    throw new Exception("Chỉ hỗ trợ ảnh .jpg, .jpeg, .png, .webp.");
+                if (image.Length > 5 * 1024 * 1024)
+                    throw new Exception("Mỗi ảnh hoàn hàng không được vượt quá 5MB.");
+
+                var fileName = $"{Guid.NewGuid():N}{ext}";
+                var filePath = Path.Combine(uploadDir, fileName);
+
+                using var stream = new FileStream(filePath, FileMode.Create);
+                await image.CopyToAsync(stream);
+
+                imageUrls.Add($"/uploads/returns/{fileName}");
+            }
+
+            return string.Join(";", imageUrls);
+        }
+
         // =========================================================================
-        // CHỨC NĂNG ADMIN/SALES/KHO ĐỒNG BỘ THEO SƠ ĐỒ NGHIỆP VỤ
-        // pending -> confirmed -> shipping -> delivered -> completed (hoặc cancelled)
+        // ADMIN/SALES/KHO — vòng đời đơn hàng (dùng trực tiếp _db + InventoryService)
+        // pending -> confirmed -> shipping -> delivered -> completed (hoặc cancelled/returned)
         // =========================================================================
 
-        // Lấy tất cả danh sách đơn hàng cho giao diện Admin/Sales/Kho
         [HttpGet("admin-all")]
         public async Task<IActionResult> GetAllOrdersAdmin()
         {
@@ -474,7 +449,6 @@ namespace LuxeHome.API.Controllers
             return Ok(orders);
         }
 
-        // BƯỚC 1: Sales "Xác Nhận Đơn" -> PENDING -> CONFIRMED
         [HttpPut("{id}/confirm")]
         public async Task<IActionResult> ConfirmOrder(long id)
         {
@@ -487,19 +461,16 @@ namespace LuxeHome.API.Controllers
             return Ok(new { message = "Đã xác nhận đơn hàng! Chờ duyệt đơn bán.", status = "CONFIRMED" });
         }
 
-        // BƯỚC 2: Sales "Duyệt Đơn Bán" -> CONFIRMED -> SHIPPING (kích hoạt lệnh xuống kho)
         [HttpPut("{id}/approve")]
         public async Task<IActionResult> ApproveOrder(long id)
         {
             var order = await _db.Orders.FindAsync(id);
             if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
 
-            // Gửi yêu cầu trừ tồn kho -> Kiểm tra tồn kho theo biến thể
             var stockResult = await _inventoryService.DeductStockForOrderAsync(id);
 
             if (!stockResult.Success)
             {
-                // Nhánh "Không đủ" -> Thông báo thiếu hàng
                 return BadRequest(new
                 {
                     message = "Không đủ hàng trong kho để duyệt đơn.",
@@ -515,11 +486,10 @@ namespace LuxeHome.API.Controllers
             {
                 message = "Đã duyệt đơn bán! Đã trừ tồn kho, đơn chuyển sang kho chuẩn bị hàng.",
                 status = "SHIPPING",
-                lowStockWarnings = stockResult.LowStockWarnings // Cảnh báo hàng sắp hết (nếu có)
+                lowStockWarnings = stockResult.LowStockWarnings
             });
         }
 
-        // BƯỚC 3: Kho "Xác Nhận Chuẩn Bị Hàng Thành Công" -> SHIPPING -> DELIVERED
         [HttpPut("{id}/warehouse-prepare")]
         public async Task<IActionResult> WarehousePrepareOrder(long id)
         {
@@ -533,8 +503,6 @@ namespace LuxeHome.API.Controllers
             return Ok(new { message = "Kho đã chuẩn bị hàng xong, đơn chuyển sang trạng thái Đang Giao Hàng.", status = "DELIVERED" });
         }
 
-        // BƯỚC 4: Sales "Ghi Nhận Thanh Toán" -> DELIVERED -> COMPLETED
-        // Khớp với onUpdateOrderStatus(selectedOrder.id, "completed") gọi từ OrdersTab.tsx
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateOrderStatus(long id, [FromBody] UpdateOrderStatusDto dto)
         {
@@ -554,7 +522,6 @@ namespace LuxeHome.API.Controllers
             return Ok(new { message = "Cập nhật trạng thái đơn hàng thành công!", status = order.OrderStatus });
         }
 
-        // NHÁNH KHÔNG HỢP LỆ: "Hủy Đơn Bán" + ghi nhận lý do vào StaffNote
         [HttpPut("{id}/cancel-admin")]
         public async Task<IActionResult> CancelOrderAdmin(long id, [FromBody] CancelOrderAdminDto dto)
         {

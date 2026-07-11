@@ -1,14 +1,8 @@
 import axios from 'axios';
 
-// Hàm chuyển camelCase sang PascalCase
-// ==========================================================================
-// SỬA LẠI HÀM NÀY trong src/api/api.ts (đang nằm đầu file, ngay trước
-// const api = axios.create(...)) — chỉ thêm 1 điều kiện chặn undefined/null
-// ==========================================================================
-
 const toPascalCase = (obj: any): any => {
   if (obj === undefined || obj === null) {
-    return obj; // 🆕 chặn lỗi "Cannot read properties of undefined (reading 'constructor')"
+    return obj;
   }
   if (Array.isArray(obj)) {
     return obj.map(toPascalCase);
@@ -30,13 +24,12 @@ const api = axios.create({
   },
 });
 
-// Transformer: Convert camelCase to PascalCase trước khi gửi
 api.interceptors.request.use((config) => {
-  if (config.data) {
+  if (config.data && !(config.data instanceof FormData)) {
     config.data = toPascalCase(config.data);
   }
 
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem("token") || localStorage.getItem("token");
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -51,7 +44,7 @@ export const orderApi = {
     receiverPhone: string;
     shippingAddress: string;
     customerNote?: string;
-    couponCode?: string;
+    couponCode?: string | null;
     paymentMethod: string;
     items: { productId: number; variantId: number; quantity: number }[];
   }) => {
@@ -61,7 +54,7 @@ export const orderApi = {
 
   // Lấy danh sách đơn hàng của user đang đăng nhập
   getMyOrders: async () => {
-    const response = await api.get('/api/Orders/my-orders');
+    const response = await api.get('/api/orders/my-orders');
     return response.data;
   },
 
@@ -71,37 +64,27 @@ export const orderApi = {
     return response.data;
   },
 
-  // === MỚI: Lấy toàn bộ đơn hàng cho Admin/Sales/Kho ===
+  // === Admin/Sales/Kho: luồng vòng đời đơn hàng ===
   getAllOrdersAdmin: async () => {
     const response = await api.get('/api/Orders/admin-all');
     return response.data;
   },
-
-  // === MỚI: Xác nhận đơn (PENDING -> CONFIRMED) ===
   confirmOrder: async (orderId: string) => {
     const response = await api.put(`/api/Orders/${orderId}/confirm`);
     return response.data;
   },
-
-  // === MỚI: Duyệt đơn bán -> Trừ tồn kho (CONFIRMED -> SHIPPING) ===
   approveOrder: async (orderId: string) => {
     const response = await api.put(`/api/Orders/${orderId}/approve`);
     return response.data;
   },
-
-  // === MỚI: Kho xác nhận chuẩn bị hàng xong (SHIPPING -> DELIVERED) ===
   warehousePrepareOrder: async (orderId: string) => {
     const response = await api.put(`/api/Orders/${orderId}/warehouse-prepare`);
     return response.data;
   },
-
-  // === MỚI: Hủy đơn bán (hoàn kho nếu đã trừ) ===
   cancelOrderAdmin: async (orderId: string, reason: string) => {
     const response = await api.put(`/api/Orders/${orderId}/cancel-admin`, { reason });
     return response.data;
   },
-
-  // === MỚI: Xử lý khách trả hàng -> Kiểm tra tình trạng -> Hoàn kho nếu hợp lệ ===
   processReturn: async (orderId: string, isValidReturn: boolean, reason?: string) => {
     const response = await api.put(`/api/Orders/${orderId}/process-return`, {
       isValidReturn,
@@ -109,67 +92,126 @@ export const orderApi = {
     });
     return response.data;
   },
+
+  // === Khách hàng: hủy đơn / trả hàng-bảo hành / đánh giá ===
+  cancelOrder: async (orderId: string, data: { reason: string }) => {
+    const response = await api.post(`/api/orders/${orderId}/cancel`, data);
+    return response.data;
+  },
+
+  requestReturnWarranty: async (
+    orderId: string,
+    data: {
+      reason: string;
+      accountInfo?: string;
+      description?: string;
+      images?: File[];
+    }
+  ) => {
+    const formData = new FormData();
+    formData.append("Reason", data.reason);
+    formData.append("AccountInfo", data.accountInfo || "");
+    formData.append("Description", data.description || "");
+
+    if (data.images && data.images.length > 0) {
+      data.images.forEach((file) => {
+        formData.append("Images", file);
+      });
+    }
+
+    const response = await api.post(`/api/orders/${orderId}/return`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
+
+  requestReturn: async (
+    orderId: string,
+    data: {
+      reason: string;
+      accountInfo?: string;
+      description?: string;
+      images?: File[];
+    }
+  ) => {
+    const formData = new FormData();
+    formData.append("Reason", data.reason);
+    formData.append("AccountInfo", data.accountInfo || "");
+    if (data.description) formData.append("Description", data.description);
+    if (data.images && data.images.length > 0) {
+      data.images.forEach((file) => {
+        formData.append("Images", file);
+      });
+    }
+    const response = await api.post(`/api/orders/${orderId}/return`, formData);
+    return response.data;
+  },
+
+  getMyReview: async (orderId: string) => {
+    const response = await api.get(`/api/orders/${orderId}/review`);
+    return response.data;
+  },
+
+  updateReview: async (
+    orderId: string,
+    data: { productId: string; rating: number; comment: string; image?: File | null }
+  ) => {
+    const formData = new FormData();
+    formData.append("ProductId", data.productId);
+    formData.append("Rating", String(data.rating));
+    formData.append("Comment", data.comment);
+    if (data.image) formData.append("image", data.image);
+    const response = await api.put(`/api/orders/${orderId}/review`, formData);
+    return response.data;
+  },
+
+  addReview: async (
+    orderId: string,
+    data: { productId: string; rating: number; comment: string; image?: File | null }
+  ) => {
+    const formData = new FormData();
+    formData.append("ProductId", data.productId);
+    formData.append("Rating", String(data.rating));
+    formData.append("Comment", data.comment);
+    if (data.image) formData.append("image", data.image);
+    const response = await api.post(`/api/orders/${orderId}/review`, formData);
+    return response.data;
+  },
 };
 
 // ==========================================================================
 // Shipment API
 // ==========================================================================
-
 export const shipmentApi = {
-  // NHÂN VIÊN KHO — Xem danh sách đơn cần giao (SHIPPING hoặc DELIVERY_FAILED)
   getOrdersToDeliver: async () => {
     const response = await api.get('/api/Shipments/orders-to-deliver');
     return response.data;
   },
-
-  // NHÂN VIÊN KHO — Tạo yêu cầu giao hàng + bàn giao cho đơn vị vận chuyển
   createShipment: async (orderId: number, carrierName: string) => {
-    const response = await api.post(`/api/Shipments/${orderId}/create`, {
-      carrierName,
-    });
+    const response = await api.post(`/api/Shipments/${orderId}/create`, { carrierName });
     return response.data;
   },
-
-  // NHÂN VIÊN KHO — Theo dõi trạng thái giao hàng / xem lý do thất bại
   getShipmentsByOrder: async (orderId: number) => {
     const response = await api.get(`/api/Shipments/order/${orderId}`);
     return response.data;
   },
-
-  // ĐƠN VỊ VẬN CHUYỂN — Xem các yêu cầu giao hàng đang chờ xử lý
   getPendingShipments: async () => {
     const response = await api.get('/api/Shipments/pending');
     return response.data;
   },
-
-  // ĐƠN VỊ VẬN CHUYỂN — Tiếp nhận yêu cầu giao hàng
   receiveShipment: async (shipmentId: number) => {
     const response = await api.put(`/api/Shipments/${shipmentId}/receive`);
     return response.data;
   },
-
-  // ĐƠN VỊ VẬN CHUYỂN — Cập nhật mã vận đơn
   updateTrackingCode: async (shipmentId: number, trackingCode: string) => {
-    const response = await api.put(
-      `/api/Shipments/${shipmentId}/tracking-code`,
-      { trackingCode }
-    );
+    const response = await api.put(`/api/Shipments/${shipmentId}/tracking-code`, { trackingCode });
     return response.data;
   },
-
-  // ĐƠN VỊ VẬN CHUYỂN — Ghi nhận kết quả giao hàng (thành công / thất bại)
-  recordDeliveryResult: async (
-    shipmentId: number,
-    success: boolean,
-    failReason?: string
-  ) => {
-    const response = await api.put(
-      `/api/Shipments/${shipmentId}/delivery-result`,
-      {
-        success,
-        failReason,
-      }
-    );
+  recordDeliveryResult: async (shipmentId: number, success: boolean, failReason?: string) => {
+    const response = await api.put(`/api/Shipments/${shipmentId}/delivery-result`, {
+      success,
+      failReason,
+    });
     return response.data;
   },
 };
@@ -179,32 +221,47 @@ export const authApi = {
     const response = await api.post('/api/user/login', data);
     return response.data;
   },
-
   register: async (data: any) => {
     const response = await api.post('/api/user/register', data);
     return response.data;
   },
-
   getProfile: async () => {
     const response = await api.get('/api/user/profile');
     return response.data;
   },
-
   getAddresses: async () => {
-    const response = await api.get('/api/user/addresses');
+    const response = await api.get("/api/user/addresses");
     return response.data;
   },
-
+  createAddress: async (data: {
+    receiverName: string;
+    receiverPhone: string;
+    fullAddress: string;
+    isDefault: boolean;
+  }) => {
+    const response = await api.post("/api/user/addresses", data);
+    return response.data;
+  },
+  updateAddress: async (
+    id: number | string,
+    data: {
+      receiverName: string;
+      receiverPhone: string;
+      fullAddress: string;
+      isDefault: boolean;
+    }
+  ) => {
+    const response = await api.put(`/api/user/addresses/${id}`, data);
+    return response.data;
+  },
   updateProfile: async (data: { fullName: string; phone: string }) => {
     const response = await api.put('/api/user/profile', data);
     return response.data;
   },
-
   facebookLogin: async (data: { token: string }) => {
     const response = await api.post('/api/user/facebook-login', data);
     return response.data;
   },
-
   googleLogin: async (data: { token: string }) => {
     const response = await api.post('/api/user/google-login', data);
     return response.data;
@@ -212,6 +269,7 @@ export const authApi = {
 };
 
 export const promotionApi = {
+  // === Admin: quản lý chương trình khuyến mãi (sơ đồ AD_Tạo chương trình khuyến mãi) ===
   getAllAdmin: async () => {
     const response = await api.get('/api/Promotions/admin-all');
     return response.data;
@@ -226,6 +284,37 @@ export const promotionApi = {
   },
   end: async (id: number) => {
     const response = await api.put(`/api/Promotions/${id}/end`);
+    return response.data;
+  },
+
+  // === Khách hàng: xem/áp dụng/lưu mã ===
+  getAvailablePromotions: async () => {
+    const response = await api.get("/api/promotions/available");
+    return response.data;
+  },
+  getPromotions: async () => {
+    const response = await api.get("/api/promotions");
+    return response.data;
+  },
+  applyPromotion: async (data: {
+    couponCode: string;
+    subtotalAmount: number;
+    shippingFee: number;
+    installationFee: number;
+  }) => {
+    const response = await api.post("/api/promotions/apply", data);
+    return response.data;
+  },
+  savePromotion: async (data: { couponCode: string }) => {
+    const response = await api.post("/api/promotions/save", data);
+    return response.data;
+  },
+  getMyPromotions: async (params?: {
+    subtotalAmount?: number;
+    shippingFee?: number;
+    installationFee?: number;
+  }) => {
+    const response = await api.get("/api/promotions/my", { params });
     return response.data;
   },
 };

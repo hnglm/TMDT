@@ -39,6 +39,7 @@ export default function ProductDetailModal({
   const [is360Active, setIs360Active] = useState(false);
   const [selectedColor, setSelectedColor] = useState(product.colors[0] || "Default");
   const [quantity, setQuantity] = useState(1);
+  const stock = Number(product.stock ?? 0);
   const [assembleService, setAssembleService] = useState(false);
   const [isAddedSuccess, setIsAddedSuccess] = useState(false);
 
@@ -56,10 +57,40 @@ export default function ProductDetailModal({
   };
 
   const handleAddToCartClick = () => {
-    onAddToCart(product, quantity, selectedColor, assembleService);
-    setIsAddedSuccess(true);
-    setTimeout(() => setIsAddedSuccess(false), 2000);
-  };
+  if (stock <= 0) {
+    alert("Sản phẩm này hiện đã hết hàng.");
+    return;
+  }
+
+  if (quantity > stock) {
+    alert(`Không thể thêm quá tồn kho. Sản phẩm này chỉ còn ${stock} sản phẩm.`);
+    setQuantity(stock);
+    return;
+  }
+
+  onAddToCart(product, quantity, selectedColor, assembleService);
+  setIsAddedSuccess(true);
+  setTimeout(() => setIsAddedSuccess(false), 2000);
+};
+  const handleChangeQuantity = (value: number) => {
+  if (stock <= 0) {
+    setQuantity(1);
+    return;
+  }
+
+  if (value < 1) {
+    setQuantity(1);
+    return;
+  }
+
+  if (value > stock) {
+    alert(`Sản phẩm này chỉ còn ${stock} sản phẩm trong kho.`);
+    setQuantity(stock);
+    return;
+  }
+
+  setQuantity(value);
+};
 
   const formattedPrice = (price: number) => {
     return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(price);
@@ -236,64 +267,85 @@ export default function ProductDetailModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <div className="flex items-center border border-[#EADBC8] rounded-xl bg-white overflow-hidden">
-                    <button
-                      onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                      className="px-3 py-2 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold"
-                    >
-                      -
-                    </button>
-                    <span className="px-4 text-sm font-semibold">{quantity}</span>
-                    <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="px-3 py-2 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold"
-                    >
-                      +
-                    </button>
-                  </div>
+<div className="space-y-3">
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+    {/* Quantity + Stock */}
+    <div className="w-full sm:w-auto">
+      <div className="flex min-h-[48px] items-center justify-between overflow-hidden rounded-xl border border-[#EADBC8] bg-white">
+        <button
+          type="button"
+          disabled={quantity <= 1 || stock <= 0}
+          onClick={() => handleChangeQuantity(quantity - 1)}
+          className="h-full px-4 py-3 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          -
+        </button>
 
-                  <button
-                    onClick={handleAddToCartClick}
-                    disabled={product.stock <= 0}
-                    className={`flex-1 py-3 px-6 rounded-xl flex items-center justify-center gap-2 font-bold text-sm tracking-wide transition-all ${isAddedSuccess
-                      ? "bg-emerald-600 text-white"
-                      : product.stock > 0
-                        ? "bg-gradient-to-r from-[#5C4033] to-[#4A3B32] text-white hover:from-[#4A3B32] hover:to-[#3A2D25] shadow-md hover:shadow-lg"
-                        : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      }`}
-                    id="add-to-cart-action-btn"
-                  >
-                    {isAddedSuccess ? (
-                      <>
-                        <Check className="w-5 h-5 animate-bounce" />
-                        Đã Thêm Vào Giỏ!
-                      </>
-                    ) : product.stock > 0 ? (
-                      <>
-                        <Sparkles className="w-4 h-4 text-[#D4AF37]" />
-                        Thêm Vào Giỏ Hàng
-                      </>
-                    ) : (
-                      "Hết Hàng / Nhận Đặt Trước"
-                    )}
-                  </button>
-                </div>
+        <span className="min-w-[44px] px-3 text-center text-sm font-semibold text-[#1A1A1A]">
+          {quantity}
+        </span>
 
-                <button
-                  onClick={() => onToggleCompare(product)}
-                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition-all ${isCompared
-                    ? "bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]"
-                    : "bg-transparent text-[#5C4033] border-[#EADBC8] hover:bg-[#F4EBE1]"
-                    }`}
-                  id="add-to-compare-btn"
-                >
-                  <Scale className="w-4 h-4" />
-                  {isCompared ? "Đang so sánh" : "So Sánh Sản Phẩm"}
-                </button>
-              </div>
+        <button
+          type="button"
+          disabled={quantity >= stock || stock <= 0}
+          onClick={() => handleChangeQuantity(quantity + 1)}
+          className="h-full px-4 py-3 text-[#5C4033] hover:bg-[#FAF6F0] transition-colors font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          +
+        </button>
+      </div>
 
+      <p className="mt-1 text-[11px] text-[#8B7E74] text-center sm:text-left">
+        Tồn kho:{" "}
+        <span className={stock > 0 ? "font-bold text-emerald-600" : "font-bold text-red-600"}>
+          {stock > 0 ? `${stock} sản phẩm` : "Hết hàng"}
+        </span>
+      </p>
+    </div>
+
+    {/* Add to cart */}
+    <button
+      type="button"
+      onClick={handleAddToCartClick}
+      disabled={stock <= 0}
+      className={`min-h-[48px] flex-1 py-3 px-6 rounded-xl flex items-center justify-center gap-2 font-bold text-sm tracking-wide transition-all ${
+        isAddedSuccess
+          ? "bg-emerald-600 text-white"
+          : stock > 0
+            ? "bg-gradient-to-r from-[#5C4033] to-[#4A3B32] text-white hover:from-[#4A3B32] hover:to-[#3A2D25] shadow-md hover:shadow-lg"
+            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+      }`}
+      id="add-to-cart-action-btn"
+    >
+      {isAddedSuccess ? (
+        <>
+          <Check className="w-5 h-5 animate-bounce" />
+          Đã Thêm Vào Giỏ!
+        </>
+      ) : stock > 0 ? (
+        <>
+          <Sparkles className="w-4 h-4 text-[#D4AF37]" />
+          Thêm Vào Giỏ Hàng
+        </>
+      ) : (
+        "Hết Hàng / Nhận Đặt Trước"
+      )}
+    </button>
+  </div>
+
+  <button
+    onClick={() => onToggleCompare(product)}
+    className={`w-full py-2.5 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border transition-all ${
+      isCompared
+        ? "bg-[#D4AF37]/10 text-[#D4AF37] border-[#D4AF37]"
+        : "bg-transparent text-[#5C4033] border-[#EADBC8] hover:bg-[#F4EBE1]"
+    }`}
+    id="add-to-compare-btn"
+  >
+    <Scale className="w-4 h-4" />
+    {isCompared ? "Đang so sánh" : "So Sánh Sản Phẩm"}
+  </button>
+</div>
             </div>
 
           </div>

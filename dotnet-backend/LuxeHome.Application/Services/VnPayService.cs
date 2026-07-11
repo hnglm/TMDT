@@ -6,7 +6,7 @@ namespace LuxeHome.Application.Services
     using System.Text;
     using Microsoft.AspNetCore.Http;
     using Microsoft.Extensions.Configuration;
-
+    //using LuxeHome.Application.DTOs;
     public class VnPayService
     {
         public string CreatePaymentUrl(decimal amount, string orderId, string ipAddress, IConfiguration config)
