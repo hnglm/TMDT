@@ -76,6 +76,9 @@ const cancelReasons = [
   ];
 const [selectedReturnReason, setSelectedReturnReason] = useState<string>("");
 const [customReturnReason, setCustomReturnReason] = useState<string>("");
+const [returnImages, setReturnImages] = useState<File[]>([]);
+const [returnImagePreviews, setReturnImagePreviews] = useState<string[]>([]);
+const [returnImageError, setReturnImageError] = useState("");
 
 const returnReasons = [
   "Sản phẩm bị lỗi hoặc hư hỏng",
@@ -310,7 +313,36 @@ useEffect(() => {
   };
 
   const wishlistProducts = products.filter((p) => wishlist.includes(p.id));
+  const handleReturnImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = Array.from(e.target.files || []);
 
+  if (files.length > 5) {
+    setReturnImageError("Chỉ được tải tối đa 5 ảnh.");
+    e.target.value = "";
+    return;
+  }
+
+  const invalidFile = files.find((file) => file.size > 5 * 1024 * 1024);
+
+  if (invalidFile) {
+    setReturnImageError("Mỗi ảnh hoàn hàng không được vượt quá 5MB.");
+    e.target.value = "";
+    return;
+  }
+
+  setReturnImages(files);
+  setReturnImagePreviews(files.map((file) => URL.createObjectURL(file)));
+  setReturnImageError("");
+};
+
+const clearReturnForm = () => {
+  setIsReturnModalOpen(false);
+  setSelectedReturnReason("");
+  setCustomReturnReason("");
+  setReturnImages([]);
+  setReturnImagePreviews([]);
+  setReturnImageError("");
+};
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="user-profile-layout">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -976,26 +1008,40 @@ setIsReviewModalOpen(true);
         />
       </div>
 
-      {/* Nút Hủy */}
-      <button 
-        onClick={async () => {
-          // Kết hợp cả 2 nguồn dữ liệu
-          const finalReason = selectedReason 
-            ? `${selectedReason}${customReason ? ' - ' + customReason : ''}`
-            : customReason;
+      <button
+  onClick={async () => {
+    const finalReason = selectedReason
+      ? `${selectedReason}${customReason ? " - " + customReason : ""}`
+      : customReason;
 
-          if (!finalReason) {
-            alert("Vui lòng chọn hoặc nhập lý do hủy!");
-            return;
-          }
+    if (!finalReason.trim()) {
+      alert("Vui lòng chọn hoặc nhập lý do hủy!");
+      return;
+    }
 
-          await orderApi.cancelOrder(selectedOrder.id, { reason: finalReason });
-          setIsCancelModalOpen(false);
-        }}
-        className="w-full mt-4 py-2 bg-red-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-red-700"
-      >
-        Xác nhận Hủy
-      </button>
+    try {
+      await orderApi.cancelOrder(selectedOrder.id, { reason: finalReason });
+      onCancelOrder?.(selectedOrder.id);
+
+      alert("Đã hủy đơn hàng thành công!");
+      setIsCancelModalOpen(false);
+      setSelectedReason("");
+      setCustomReason("");
+    } catch (err: any) {
+      console.error("Lỗi hủy đơn:", err);
+      console.error("Backend response:", err.response?.data);
+
+      alert(
+        err.response?.data?.message ||
+          err.response?.data?.detail ||
+          "Hủy đơn thất bại. Vui lòng kiểm tra lại API."
+      );
+    }
+  }}
+  className="w-full mt-4 py-2 bg-red-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-red-700"
+>
+  Xác nhận Hủy
+</button>
     </div>
   </div>
 )}
@@ -1224,22 +1270,48 @@ setCurrentReviewImageUrl("");
           placeholder="Ví dụ: Sản phẩm bị trầy ở mặt bàn, thiếu ốc lắp ráp, giao sai màu..."
           className="w-full h-24 border border-[#EADBC8] rounded-xl p-3 text-xs focus:outline-none focus:border-[#D4AF37]"
         />
+        <div className="mt-4">
+  <p className="text-xs text-gray-500 mb-2">
+    Ảnh minh chứng hoàn hàng / bảo hành:
+  </p>
+
+  <input
+    type="file"
+    accept="image/*"
+    multiple
+    onChange={handleReturnImagesChange}
+    className="w-full text-xs border border-[#EADBC8] rounded-xl p-2"
+  />
+
+  <p className="text-[11px] text-[#8B7E74] mt-1">
+    Có thể tải tối đa 5 ảnh, mỗi ảnh không quá 5MB.
+  </p>
+
+  {returnImageError && (
+    <p className="text-[11px] text-red-600 font-semibold mt-2">
+      {returnImageError}
+    </p>
+  )}
+
+  {returnImagePreviews.length > 0 && (
+    <div className="grid grid-cols-3 gap-2 mt-3">
+      {returnImagePreviews.map((src, index) => (
+        <img
+          key={index}
+          src={src}
+          alt={`Ảnh hoàn hàng ${index + 1}`}
+          className="w-full h-20 object-cover rounded-lg border border-[#EADBC8]"
+        />
+      ))}
+    </div>
+  )}
+</div>
       </div>
 
       <div className="flex gap-2 mt-4">
         <button
           type="button"
-          onClick={() => {
-            setIsReturnModalOpen(false);
-            setSelectedReturnReason("");
-            setCustomReturnReason("");
-            setIsReviewModalOpen(false);
-  setIsReviewEditMode(false);
-  setCurrentReviewCanEdit(true);
-  setCurrentReviewProductId(null);
-  setNewReviewComment("");
-  setNewReviewRating(5);
-          }}
+          onClick={clearReturnForm}
           className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold uppercase text-xs hover:bg-gray-300"
         >
           Đóng
@@ -1259,22 +1331,28 @@ setCurrentReviewImageUrl("");
 
             try {
               await orderApi.requestReturnWarranty(selectedOrder.id, {
-                reason: finalReturnReason,
-                accountInfo: currentUser.email
-              });
+              reason: finalReturnReason,
+              description: customReturnReason,
+              accountInfo: currentUser.email,
+              images: returnImages,
+            });
               setReturnRequestedOrderIds((prev) =>
               prev.includes(selectedOrder.id) ? prev : [...prev, selectedOrder.id]
             );
 
               alert("Đã gửi yêu cầu hoàn hàng / bảo hành thành công!");
 
-              setIsReturnModalOpen(false);
-              setSelectedReturnReason("");
-              setCustomReturnReason("");
-            } catch (err) {
-              console.error("Lỗi gửi yêu cầu hoàn hàng / bảo hành:", err);
-              alert("Gửi yêu cầu thất bại. Vui lòng kiểm tra lại API.");
-            }
+              clearReturnForm();
+            } catch (err: any) {
+  console.error("Lỗi gửi yêu cầu hoàn hàng / bảo hành:", err);
+  console.error("Backend response:", err.response?.data);
+
+  alert(
+    err.response?.data?.message ||
+      err.response?.data?.detail ||
+      "Gửi yêu cầu thất bại. Vui lòng kiểm tra lại API."
+  );
+}
           }}
           className="flex-1 py-2 bg-red-600 text-white rounded-lg font-bold uppercase text-xs hover:bg-red-700"
         >

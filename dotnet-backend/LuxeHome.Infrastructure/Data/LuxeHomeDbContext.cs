@@ -685,6 +685,10 @@ public partial class LuxeHomeDbContext : DbContext
 
         modelBuilder.Entity<ReturnWarrantyRequest>(entity =>
         {
+            entity.Property(e => e.AccountInfo).HasColumnName("account_info");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.ImageUrls).HasColumnName("image_urls");
             entity.HasKey(e => e.Id).HasName("return_warranty_requests_pkey");
 
             entity.ToTable("return_warranty_requests");

@@ -216,13 +216,14 @@ if (alreadyRequested)
         RequestType = "RETURN",
 
         Reason = dto.Reason,
+        Description = dto.Description,
         AccountInfo = dto.AccountInfo,
 
         RefundAmount = firstItem.TotalPrice,
         Status = "PENDING",
         CreatedAt = DateTime.UtcNow.AddHours(7),
 
-        ImageUrl = null,
+        ImageUrls = dto.ImageUrls,
         ResultNote = null
     };
 

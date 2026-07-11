@@ -53,9 +53,62 @@ export const orderApi = {
   },
   requestReturnWarranty: async (
   orderId: string,
-  data: { reason: string; accountInfo?: string }
+  data: {
+    reason: string;
+    accountInfo?: string;
+    description?: string;
+    images?: File[];
+  }
 ) => {
-  const response = await api.post(`/api/orders/${orderId}/return`, data);
+  const formData = new FormData();
+
+  formData.append("Reason", data.reason);
+  formData.append("AccountInfo", data.accountInfo || "");
+  formData.append("Description", data.description || "");
+
+  if (data.images && data.images.length > 0) {
+    data.images.forEach((file) => {
+      formData.append("Images", file);
+    });
+  }
+
+  console.log("RETURN FORM DATA:");
+  for (const pair of formData.entries()) {
+    console.log(pair[0], pair[1]);
+  }
+
+const response = await api.post(`/api/orders/${orderId}/return`, formData, {
+  headers: {
+    "Content-Type": "multipart/form-data",
+  },
+});  return response.data;
+},
+
+requestReturn: async (
+  orderId: string,
+  data: {
+    reason: string;
+    accountInfo?: string;
+    description?: string;
+    images?: File[];
+  }
+) => {
+  const formData = new FormData();
+
+  formData.append("Reason", data.reason);
+  formData.append("AccountInfo", data.accountInfo || "");
+
+  if (data.description) {
+    formData.append("Description", data.description);
+  }
+
+  if (data.images && data.images.length > 0) {
+    data.images.forEach((file) => {
+      formData.append("Images", file);
+    });
+  }
+
+  const response = await api.post(`/api/orders/${orderId}/return`, formData);
   return response.data;
 },
 getMyReview: async (orderId: string) => {
@@ -109,15 +162,7 @@ updateReview: async (
   const response = await api.post(`/api/orders/${orderId}/review`, formData);
   return response.data;
 },
-
-  // 3. Yêu cầu hoàn hàng
-  // Backend sẽ nhận: { Reason }
-  requestReturn: async (orderId: string, data: { reason: string }) => {
-    const response = await api.post(`/api/orders/${orderId}/return`, data);
-    return response.data;
-  }
 };
-
 export const authApi = {
   login: async (data: any) => {
     const response = await api.post('/api/user/login', data);

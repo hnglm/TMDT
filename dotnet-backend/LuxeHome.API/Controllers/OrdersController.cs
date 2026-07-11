@@ -94,16 +94,26 @@ public async Task<IActionResult> CancelOrder(string id, [FromBody] CancelOrderDt
 }
 [HttpPost("{id}/return")]
 [Authorize]
-public async Task<IActionResult> RequestReturn(string id, [FromBody] ReturnWarrantyDto dto)
+public async Task<IActionResult> CreateReturnWarranty(string id, [FromForm] ReturnWarrantyDto dto)
 {
     try
     {
         var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized();
+
+        if (string.IsNullOrEmpty(userIdClaim))
+        {
+            return Unauthorized();
+        }
+
+        dto.ImageUrls = await SaveReturnImagesAsync(dto.Images);
 
         await _orderService.CreateReturnRequestAsync(id, long.Parse(userIdClaim), dto);
-        
-        return Ok(new { message = "Yêu cầu hoàn hàng đã được ghi nhận." });
+
+        return Ok(new
+        {
+            message = "Yêu cầu hoàn hàng đã được ghi nhận.",
+            imageUrls = dto.ImageUrls
+        });
     }
     catch (Exception ex)
     {
@@ -228,6 +238,62 @@ private async Task<string?> SaveReviewImageAsync(IFormFile? image)
     await image.CopyToAsync(stream);
 
     return $"/uploads/reviews/{fileName}";
+}
+    private async Task<string?> SaveReturnImagesAsync(List<IFormFile>? images)
+{
+    if (images == null || images.Count == 0)
+    {
+        return null;
+    }
+
+    if (images.Count > 5)
+    {
+        throw new Exception("Chỉ được tải tối đa 5 ảnh.");
+    }
+
+    var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+
+    var webRoot = _env.WebRootPath;
+
+    if (string.IsNullOrWhiteSpace(webRoot))
+    {
+        webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+    }
+
+    var uploadDir = Path.Combine(webRoot, "uploads", "returns");
+    Directory.CreateDirectory(uploadDir);
+
+    var imageUrls = new List<string>();
+
+    foreach (var image in images)
+    {
+        if (image == null || image.Length == 0)
+        {
+            continue;
+        }
+
+        var ext = Path.GetExtension(image.FileName).ToLowerInvariant();
+
+        if (!allowedExtensions.Contains(ext))
+        {
+            throw new Exception("Chỉ hỗ trợ ảnh .jpg, .jpeg, .png, .webp.");
+        }
+
+        if (image.Length > 5 * 1024 * 1024)
+        {
+            throw new Exception("Mỗi ảnh hoàn hàng không được vượt quá 5MB.");
+        }
+
+        var fileName = $"{Guid.NewGuid():N}{ext}";
+        var filePath = Path.Combine(uploadDir, fileName);
+
+        using var stream = new FileStream(filePath, FileMode.Create);
+        await image.CopyToAsync(stream);
+
+        imageUrls.Add($"/uploads/returns/{fileName}");
+    }
+
+    return string.Join(";", imageUrls);
 }
     }
 }

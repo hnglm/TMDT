@@ -754,6 +754,18 @@ const savedRole = sessionStorage.getItem("user_role");
       })
     );
   };
+  const handleCancelOrder = (orderId: string) => {
+  setOrders((prevOrders) =>
+    prevOrders.map((order) =>
+      order.id === orderId
+        ? {
+            ...order,
+            status: "cancelled",
+          }
+        : order
+    )
+  );
+};
 
   return (
     <div className="min-h-screen bg-[#FAF6F0] flex flex-col justify-between text-[#1A1A1A] font-sans">
@@ -842,6 +854,8 @@ const savedRole = sessionStorage.getItem("user_role");
             onSelectProduct={(p) => setSelectedProductForDetail(p)}
             onRemoveFromWishlist={handleToggleWishlist}
             onAddReviewToProduct={handleAddReviewToProduct}
+            onCancelOrder={handleCancelOrder}
+
           />
         )}
 
