@@ -16,7 +16,7 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: [
       'localhost',
-      'clause-accuracy-kangaroo.ngrok-free.dev',
+      '.ngrok-free.dev',
     ],
     proxy: {
       '/api': {

@@ -12,7 +12,7 @@ public partial class Product
 
     public string? ProductName { get; set; }
 
-    [Column("brand")]
+    [NotMapped]
     public string? Brand { get; set; }
 
     public string? Slug { get; set; }

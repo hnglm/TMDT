@@ -23,33 +23,28 @@ public class ProductsController : ControllerBase
         [FromQuery] string search = "", 
         [FromQuery] string category = "")
     {
-        // BỎ ĐIỀU KIỆN LỌC STATUS = ACTIVE ĐỂ ADMIN THẤY ĐƯỢC SẢN PHẨM INACTIVE
         var query = _context.Products
             .Include(p => p.Category)
             .Include(p => p.ProductImages)
             .Include(p => p.ProductVariants)
             .AsQueryable();
 
-        // 1.1 Lọc theo từ khóa tìm kiếm (Tên sản phẩm)
         if (!string.IsNullOrEmpty(search))
         {
             query = query.Where(p => p.ProductName.ToLower().Contains(search.ToLower()) || 
                                      p.ProductCode.ToLower().Contains(search.ToLower()));
         }
 
-        // 1.2 Lọc theo danh mục
         if (!string.IsNullOrEmpty(category) && category != "all")
         {
             query = query.Where(p => p.Category != null && p.Category.Slug == category);
         }
 
-        // 1.3 Đếm tổng số lượng sản phẩm thỏa mãn điều kiện để tính số trang
         int totalItems = await query.CountAsync();
         int totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-        // 1.4 Lấy dữ liệu của trang hiện tại (Skip & Take)
         var products = await query
-            .OrderByDescending(p => p.Id) // Mới nhất lên đầu
+            .OrderByDescending(p => p.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(p => new ProductResponseDto
@@ -62,7 +57,6 @@ public class ProductsController : ControllerBase
                 Description = p.Description,
                 Material = p.Material,
                 WarrantyMonths = p.WarrantyMonths,
-                // 👑 MỚI: TRẢ VỀ THÊM TRẠNG THÁI VÀ SEO ĐỂ HIỂN THỊ LÊN FORM EDIT
                 Status = p.Status,
                 MetaTitle = p.MetaTitle,
                 MetaDescription = p.MetaDescription,
@@ -83,11 +77,11 @@ public class ProductsController : ControllerBase
                         CurrentPrice = v.CurrentPrice, 
                         Color = v.Color 
                     })
-                    .ToList()
+                    .ToList(),
+                    StockQuantity = p.InventoryStocks.Sum(s => (int?)s.QuantityAvailable) ?? 0
             })
             .ToListAsync();
 
-        // Trả về Object bọc lại dữ liệu phân trang
         return Ok(new { 
             Items = products, 
             TotalItems = totalItems, 
@@ -100,7 +94,6 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] CreateProductDto dto)
     {
-        // Khởi tạo Transaction để đảm bảo an toàn
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
@@ -137,9 +130,15 @@ public class ProductsController : ControllerBase
                 }).ToList();
             }
 
+            // 👑 SỬA: LUÔN đảm bảo có ít nhất 1 variant (kể cả khi không nhập màu)
+            // để InventoryStock luôn có VariantId hợp lệ, tránh dữ liệu hỏng như sản phẩm #10
+            // 👑 SỬA: LUÔN đảm bảo có ít nhất 1 variant (kể cả khi không nhập màu)
+            // để InventoryStock luôn có VariantId hợp lệ, tránh dữ liệu hỏng như sản phẩm #10
+            List<ProductVariant> productVariants;
+
             if (dto.Variants != null && dto.Variants.Any())
             {
-                product.ProductVariants = dto.Variants.Select(v => new ProductVariant
+                productVariants = dto.Variants.Select(v => new ProductVariant
                 {
                     VariantName = dto.ProductName + " - " + v.Color,
                     Color = v.Color,
@@ -147,38 +146,40 @@ public class ProductsController : ControllerBase
                     Status = "ACTIVE"
                 }).ToList();
             }
+            else
+            {
+                productVariants = new List<ProductVariant>
+                {
+                    new ProductVariant
+                    {
+                        VariantName = dto.ProductName + " - Mặc định",
+                        Color = "Mặc định",
+                        CurrentPrice = 0, // Sản phẩm chưa nhập giá biến thể, Admin cần cập nhật giá sau
+                        Status = "ACTIVE"
+                    }
+                };
+            }
+
+            product.ProductVariants = productVariants;
 
             _context.Products.Add(product);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(); // Lưu để sinh Id cho product + từng variant
 
-            int stockPerVariant = dto.Variants != null && dto.Variants.Any() 
-                ? dto.InitialStock / dto.Variants.Count 
+            int stockPerVariant = product.ProductVariants.Count > 0
+                ? dto.InitialStock / product.ProductVariants.Count
                 : dto.InitialStock;
 
-            if (product.ProductVariants.Any())
-            {
-                foreach (var variant in product.ProductVariants)
-                {
-                    _context.InventoryStocks.Add(new InventoryStock
-                    {
-                        ProductId = product.Id,
-                        VariantId = variant.Id,
-                        QuantityAvailable = stockPerVariant,
-                        QuantityOnHand = stockPerVariant,
-                        QuantityReserved = 0,
-                        MinStockLevel = 0,
-                        StockStatus = "IN_STOCK",
-                        UpdatedAt = DateTime.UtcNow
-                    });
-                }
-            }
-            else
+            foreach (var variant in product.ProductVariants)
             {
                 _context.InventoryStocks.Add(new InventoryStock
                 {
                     ProductId = product.Id,
-                    QuantityAvailable = dto.InitialStock,
-                    QuantityOnHand = dto.InitialStock,
+                    VariantId = variant.Id, // ✅ Luôn có variant hợp lệ
+                    QuantityAvailable = stockPerVariant,
+                    QuantityOnHand = stockPerVariant,
+                    QuantityReserved = 0,
+                    MinStockLevel = 5,
+                    StockStatus = "IN_STOCK",
                     UpdatedAt = DateTime.UtcNow
                 });
             }
@@ -191,7 +192,8 @@ public class ProductsController : ControllerBase
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            return StatusCode(500, $"Lỗi server: {ex.Message}");
+            Console.WriteLine("CREATE PRODUCT ERROR: " + ex.ToString());
+            return StatusCode(500, new { message = "Lỗi server", detail = ex.InnerException?.Message ?? ex.Message });
         }
     }
 
@@ -215,26 +217,55 @@ public class ProductsController : ControllerBase
         }
     }
 
-    // 4. Cập nhật tồn kho nhanh
+    // 4. Cập nhật tồn kho nhanh (an toàn với sản phẩm chưa có InventoryStock)
+    public class UpdateStockDto
+    {
+        public int NewStock { get; set; }
+    }
+
     [HttpPatch("{id}/stock")]
-    public async Task<IActionResult> UpdateStock(long id, [FromBody] int newStock)
+    public async Task<IActionResult> UpdateStock(long id, [FromBody] UpdateStockDto dto)
     {
         try
         {
             var stockRecords = await _context.InventoryStocks.Where(i => i.ProductId == id).ToListAsync();
-            if (!stockRecords.Any()) return NotFound("Không tìm thấy dữ liệu tồn kho.");
+
+            if (!stockRecords.Any())
+            {
+                // 👑 SỬA: Nếu chưa có InventoryStock (sản phẩm dữ liệu cũ bị thiếu),
+                // tự tạo mới thay vì trả lỗi 404 để không chặn thao tác của Admin
+                var firstVariant = await _context.ProductVariants.FirstOrDefaultAsync(v => v.ProductId == id);
+                if (firstVariant == null)
+                    return BadRequest(new { message = "Sản phẩm này chưa có biến thể (variant), không thể tạo tồn kho." });
+
+                var newStock = new InventoryStock
+                {
+                    ProductId = id,
+                    VariantId = firstVariant.Id,
+                    QuantityAvailable = dto.NewStock,
+                    QuantityOnHand = dto.NewStock,
+                    QuantityReserved = 0,
+                    MinStockLevel = 5,
+                    StockStatus = "IN_STOCK",
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.InventoryStocks.Add(newStock);
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Đã tạo mới bản ghi tồn kho.", newStock = dto.NewStock });
+            }
 
             var firstVariantStock = stockRecords.First();
-            firstVariantStock.QuantityAvailable = newStock;
-            firstVariantStock.QuantityOnHand = newStock;
+            firstVariantStock.QuantityAvailable = dto.NewStock;
+            firstVariantStock.QuantityOnHand = dto.NewStock;
             firstVariantStock.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
-            return Ok();
+            return Ok(new { message = "Cập nhật tồn kho thành công.", newStock = dto.NewStock });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Lỗi cập nhật tồn kho: {ex.Message}");
+            Console.WriteLine("UPDATE STOCK ERROR: " + ex.ToString());
+            return StatusCode(500, new { message = "Lỗi cập nhật tồn kho", detail = ex.InnerException?.Message ?? ex.Message });
         }
     }
 
@@ -248,10 +279,10 @@ public class ProductsController : ControllerBase
             var product = await _context.Products
                 .Include(p => p.ProductVariants)
                 .Include(p => p.Category)
-                .Include(p => p.ProductImages) // 👑 THÊM INCLUDE NÀY ĐỂ SỬA ẢNH
+                .Include(p => p.ProductImages)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            if (product == null) return NotFound("Không tìm thấy sản phẩm.");
+            if (product == null) return NotFound(new { message = "Không tìm thấy sản phẩm." });
 
             if (!string.IsNullOrEmpty(dto.CategorySlug) && (product.Category == null || product.Category.Slug != dto.CategorySlug))
             {
@@ -259,16 +290,14 @@ public class ProductsController : ControllerBase
                 if (newCategory != null) product.CategoryId = newCategory.Id;
             }
 
-            // 👑 3. Cập nhật thông tin cơ bản + Trạng thái + SEO
             product.ProductName = dto.ProductName;
             product.Style = dto.Style;
             product.Material = dto.Material;
-            
+
             if (!string.IsNullOrEmpty(dto.Status)) product.Status = dto.Status.ToUpper();
             if (dto.MetaTitle != null) product.MetaTitle = dto.MetaTitle;
             if (dto.MetaDescription != null) product.MetaDescription = dto.MetaDescription;
 
-            // Cập nhật Ảnh Chính
             if (!string.IsNullOrEmpty(dto.ImageUrl))
             {
                 var mainImage = product.ProductImages.FirstOrDefault(i => i.IsMain == true);
@@ -279,18 +308,50 @@ public class ProductsController : ControllerBase
                 }
             }
 
-            if (product.ProductVariants != null && product.ProductVariants.Any())
+            // 👑 SỬA: Nếu sản phẩm chưa có variant nào (dữ liệu cũ bị thiếu),
+            // tự tạo 1 variant mặc định thay vì bỏ qua trong im lặng
+            ProductVariant? targetVariant = product.ProductVariants.FirstOrDefault();
+            if (targetVariant == null)
             {
-                var firstVariant = product.ProductVariants.First();
-                firstVariant.CurrentPrice = dto.CurrentPrice;
+                targetVariant = new ProductVariant
+                {
+                    ProductId = product.Id,
+                    VariantName = product.ProductName + " - Mặc định",
+                    Color = "Mặc định",
+                    CurrentPrice = dto.CurrentPrice,
+                    Status = "ACTIVE"
+                };
+                _context.ProductVariants.Add(targetVariant);
+                await _context.SaveChangesAsync(); // cần Id trước khi tạo InventoryStock
+            }
+            else
+            {
+                targetVariant.CurrentPrice = dto.CurrentPrice;
             }
 
-            var stockRecord = await _context.InventoryStocks.FirstOrDefaultAsync(i => i.ProductId == id);
+            // 👑 SỬA: Cập nhật tồn kho theo VariantId cụ thể, tự tạo nếu chưa có
+            var stockRecord = await _context.InventoryStocks
+                .FirstOrDefaultAsync(i => i.ProductId == id && i.VariantId == targetVariant.Id);
+
             if (stockRecord != null)
             {
                 stockRecord.QuantityAvailable = dto.Stock;
                 stockRecord.QuantityOnHand = dto.Stock;
                 stockRecord.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _context.InventoryStocks.Add(new InventoryStock
+                {
+                    ProductId = id,
+                    VariantId = targetVariant.Id,
+                    QuantityAvailable = dto.Stock,
+                    QuantityOnHand = dto.Stock,
+                    QuantityReserved = 0,
+                    MinStockLevel = 5,
+                    StockStatus = "IN_STOCK",
+                    UpdatedAt = DateTime.UtcNow
+                });
             }
 
             await _context.SaveChangesAsync();
@@ -301,7 +362,8 @@ public class ProductsController : ControllerBase
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            return StatusCode(500, $"Lỗi server: {ex.Message}");
+            Console.WriteLine("UPDATE PRODUCT ERROR: " + ex.ToString());
+            return StatusCode(500, new { message = "Lỗi server", detail = ex.InnerException?.Message ?? ex.Message });
         }
     }
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Users, RefreshCw, X } from "lucide-react";
 
@@ -142,6 +141,9 @@ export default function UsersTab() {
                   <option value="STAFF">Nhân Viên</option>
                   <option value="MANAGER">Quản Lý</option>
                   <option value="ADMIN">Quản Trị Viên</option>
+                  <option value="SALES_STAFF">Nhân viên bán hàng</option> 
+                  <option value="WAREHOUSE_STAFF">Nhân viên kho</option>
+                  <option value="SHIPPER">Đơn vị vận chuyển</option>
                 </select>
               </div>
               <div>

@@ -141,6 +141,7 @@ builder.Services.AddScoped<ChatUseCase>();
 builder.Services.AddScoped<ImageSearchUseCase>();
 builder.Services.AddScoped<UserUseCase>(); 
 builder.Services.AddScoped<VnPayService>();
+builder.Services.AddScoped<InventoryService>();
 
 // appsettings có ApiKey: "" nên không dùng ?? — chuỗi rỗng vẫn “truthy” với null-coalescing
 var geminiKey = builder.Configuration["Gemini:ApiKey"];

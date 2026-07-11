@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || "development";
 
-const NGROK_HOST = "clause-accuracy-kangaroo.ngrok-free.dev";
+const NGROK_HOST = " https://kenny-ungraceful-tatum.ngrok-free.dev";
 
 // Tạo HTTP server chung cho Express + Vite HMR
 const httpServer = createHttpServer(app);

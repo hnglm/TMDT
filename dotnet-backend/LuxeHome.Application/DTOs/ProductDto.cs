@@ -10,6 +10,7 @@ namespace LuxeHome.Application.DTOs
         public string Description { get; set; }
         public string Material { get; set; }
         public int? WarrantyMonths { get; set; }
+        public int StockQuantity { get; set; }
         
         public string? Status { get; set; }
         public string? MetaTitle { get; set; }

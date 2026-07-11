@@ -16,16 +16,24 @@ namespace LuxeHome.API.Controllers
         private readonly IConfiguration _config;
         private readonly VnPayService _vnpay;
         private readonly LuxeHomeDbContext _db;
+        private readonly InventoryService _inventoryService;
 
         public OrdersController(
             IConfiguration config,
             VnPayService vnpay,
-            LuxeHomeDbContext db)
+            LuxeHomeDbContext db,
+            InventoryService inventoryService)
         {
             _config = config;
             _vnpay = vnpay;
             _db = db;
+            _inventoryService = inventoryService;
         }
+
+        // 🆕 Đọc URL frontend từ appsettings.json (Frontend:BaseUrl)
+        // Fallback về localhost:3000 nếu chưa cấu hình, để không phá code cũ
+        private string FrontendBaseUrl =>
+            (_config["Frontend:BaseUrl"] ?? "http://localhost:3000").TrimEnd('/');
 
         [HttpPost("create-payment-url")]
         public async Task<IActionResult> CreatePaymentUrl([FromBody] CreateOrderDto dto)
@@ -115,7 +123,9 @@ namespace LuxeHome.API.Controllers
 
                 if (orderItems.Count == 0)
                 {
-                    return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
+                    {
+                        return BadRequest(new { message = "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." });
+                    }
                 }
 
                 string vnpayOrderId = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
@@ -194,10 +204,9 @@ namespace LuxeHome.API.Controllers
 
                 var orderItems = new List<OrderItem>();
                 decimal subtotal = 0;
-
+                
                 foreach (var it in dto.Items)
                 {
-                    // Query only required fields so checkout does not depend on optional product columns.
                     var itemData = await _db.ProductVariants
                         .Where(v => v.ProductId == it.ProductId)
                         .OrderByDescending(v => v.Id == it.VariantId)
@@ -328,7 +337,7 @@ namespace LuxeHome.API.Controllers
                 Console.WriteLine("Không tìm thấy đơn hàng với TxnRef: " + txnRef);
                 var totalOrders = await _db.Orders.CountAsync();
                 Console.WriteLine($"DEBUG: Không tìm thấy. Tổng số đơn hàng trong DB: {totalOrders}");
-                return Redirect("http://localhost:3000/checkout/fail?reason=order-not-found");
+                return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=order-not-found");
             }
 
             decimal vnpAmount = decimal.Parse(amountRaw, CultureInfo.InvariantCulture) / 100;
@@ -341,7 +350,7 @@ namespace LuxeHome.API.Controllers
 
                 await _db.SaveChangesAsync();
 
-                return Redirect("http://localhost:3000/checkout/fail?reason=invalid-amount");
+                return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=invalid-amount");
             }
 
             if (responseCode == "00")
@@ -352,7 +361,7 @@ namespace LuxeHome.API.Controllers
 
                 await _db.SaveChangesAsync();
 
-                return Redirect($"http://localhost:3000/checkout/success?orderId={txnRef}");
+                return Redirect($"{FrontendBaseUrl}/checkout/success?orderId={txnRef}");
             }
 
             order.PaymentStatus = "FAILED";
@@ -360,7 +369,7 @@ namespace LuxeHome.API.Controllers
 
             await _db.SaveChangesAsync();
 
-            return Redirect($"http://localhost:3000/checkout/fail?orderId={txnRef}");
+            return Redirect($"{FrontendBaseUrl}/checkout/fail?orderId={txnRef}");
         }
 
         [HttpGet("test-vnpay")]
@@ -373,16 +382,13 @@ namespace LuxeHome.API.Controllers
                 _config
             );
 
-            return Ok(new
-            {
-                paymentUrl
-            });
+            return Ok(new { paymentUrl });
         }
+
         [HttpGet("my-orders")]
-        [Authorize] // Yêu cầu đăng nhập mới được xem
+        [Authorize]
         public async Task<IActionResult> GetMyOrders()
         {
-            // Lấy ID người dùng từ Token JWT mà bạn đã cấu hình trong Program.cs
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             
             if (string.IsNullOrEmpty(userIdClaim)) 
@@ -390,7 +396,6 @@ namespace LuxeHome.API.Controllers
 
             long userId = long.Parse(userIdClaim);
 
-            // Truy vấn các đơn hàng của user này (kèm chi tiết sản phẩm)
             var orders = await _db.Orders
                 .Where(o => o.UserId == userId)
                 .OrderByDescending(o => o.Id)
@@ -428,5 +433,200 @@ namespace LuxeHome.API.Controllers
 
             return Ok(orders);
         }
+
+        // =========================================================================
+        // CHỨC NĂNG ADMIN/SALES/KHO ĐỒNG BỘ THEO SƠ ĐỒ NGHIỆP VỤ
+        // pending -> confirmed -> shipping -> delivered -> completed (hoặc cancelled)
+        // =========================================================================
+
+        // Lấy tất cả danh sách đơn hàng cho giao diện Admin/Sales/Kho
+        [HttpGet("admin-all")]
+        public async Task<IActionResult> GetAllOrdersAdmin()
+        {
+            var orders = await _db.Orders
+                .OrderByDescending(o => o.Id)
+                .Select(o => new
+                {
+                    o.Id,
+                    o.OrderCode,
+                    CustomerName = o.ReceiverName,
+                    TotalAmount = o.FinalAmount,
+                    Status = o.OrderStatus,
+                    o.PaymentStatus,
+                    o.ConfirmedAt,
+                    o.ReceiverPhone,
+                    o.ShippingAddress,
+                    o.CustomerNote,
+                    o.StaffNote,
+                    Items = o.OrderItems.Select(i => new
+                    {
+                        i.ProductId,
+                        i.VariantId,
+                        i.ProductName,
+                        i.Sku,
+                        i.Quantity,
+                        i.OriginalPrice,
+                        i.SellingPrice,
+                        i.TotalPrice
+                    }).ToList()
+                })
+                .ToListAsync();
+            return Ok(orders);
+        }
+
+        // BƯỚC 1: Sales "Xác Nhận Đơn" -> PENDING -> CONFIRMED
+        [HttpPut("{id}/confirm")]
+        public async Task<IActionResult> ConfirmOrder(long id)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            order.OrderStatus = "CONFIRMED";
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Đã xác nhận đơn hàng! Chờ duyệt đơn bán.", status = "CONFIRMED" });
+        }
+
+        // BƯỚC 2: Sales "Duyệt Đơn Bán" -> CONFIRMED -> SHIPPING (kích hoạt lệnh xuống kho)
+        [HttpPut("{id}/approve")]
+        public async Task<IActionResult> ApproveOrder(long id)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            // Gửi yêu cầu trừ tồn kho -> Kiểm tra tồn kho theo biến thể
+            var stockResult = await _inventoryService.DeductStockForOrderAsync(id);
+
+            if (!stockResult.Success)
+            {
+                // Nhánh "Không đủ" -> Thông báo thiếu hàng
+                return BadRequest(new
+                {
+                    message = "Không đủ hàng trong kho để duyệt đơn.",
+                    insufficientItems = stockResult.InsufficientItems
+                });
+            }
+
+            order.OrderStatus = "SHIPPING";
+            order.ShippingStatus = "PREPARING";
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Đã duyệt đơn bán! Đã trừ tồn kho, đơn chuyển sang kho chuẩn bị hàng.",
+                status = "SHIPPING",
+                lowStockWarnings = stockResult.LowStockWarnings // Cảnh báo hàng sắp hết (nếu có)
+            });
+        }
+
+        // BƯỚC 3: Kho "Xác Nhận Chuẩn Bị Hàng Thành Công" -> SHIPPING -> DELIVERED
+        [HttpPut("{id}/warehouse-prepare")]
+        public async Task<IActionResult> WarehousePrepareOrder(long id)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            order.OrderStatus = "DELIVERED";
+            order.ShippingStatus = "READY_TO_SHIP";
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Kho đã chuẩn bị hàng xong, đơn chuyển sang trạng thái Đang Giao Hàng.", status = "DELIVERED" });
+        }
+
+        // BƯỚC 4: Sales "Ghi Nhận Thanh Toán" -> DELIVERED -> COMPLETED
+        // Khớp với onUpdateOrderStatus(selectedOrder.id, "completed") gọi từ OrdersTab.tsx
+        [HttpPut("{id}/status")]
+        public async Task<IActionResult> UpdateOrderStatus(long id, [FromBody] UpdateOrderStatusDto dto)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            order.OrderStatus = dto.Status.ToUpperInvariant();
+
+            if (order.OrderStatus == "COMPLETED")
+            {
+                order.PaymentStatus = "PAID";
+                order.ConfirmedAt = order.ConfirmedAt ?? DateTime.UtcNow;
+            }
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật trạng thái đơn hàng thành công!", status = order.OrderStatus });
+        }
+
+        // NHÁNH KHÔNG HỢP LỆ: "Hủy Đơn Bán" + ghi nhận lý do vào StaffNote
+        [HttpPut("{id}/cancel-admin")]
+        public async Task<IActionResult> CancelOrderAdmin(long id, [FromBody] CancelOrderAdminDto dto)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            bool wasStockDeducted = order.ShippingStatus == "PREPARING" || order.ShippingStatus == "READY_TO_SHIP";
+            List<string> warnings = new();
+
+            if (wasStockDeducted)
+            {
+                var restoreResult = await _inventoryService.RestoreStockForOrderAsync(id, isValidReturn: true);
+                if (!restoreResult.Success)
+                {
+                    return BadRequest(new { message = "Hủy đơn thất bại khi hoàn kho.", detail = restoreResult.InsufficientItems });
+                }
+                warnings = restoreResult.LowStockWarnings;
+            }
+
+            order.OrderStatus = "CANCELLED";
+            order.StaffNote = dto.Reason;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Đã ghi nhận lý do, cập nhật trạng thái hủy đơn" + (wasStockDeducted ? " và hoàn kho." : "."),
+                status = "CANCELLED",
+                lowStockWarnings = warnings
+            });
+        }
+
+        [HttpPut("{id}/process-return")]
+        public async Task<IActionResult> ProcessReturn(long id, [FromBody] ProcessReturnDto dto)
+        {
+            var order = await _db.Orders.FindAsync(id);
+            if (order == null) return NotFound(new { message = "Không tìm thấy đơn hàng." });
+
+            var restoreResult = await _inventoryService.RestoreStockForOrderAsync(id, dto.IsValidReturn);
+
+            if (!restoreResult.Success)
+            {
+                order.StaffNote = dto.Reason;
+                await _db.SaveChangesAsync();
+                return BadRequest(new { message = "Hàng trả không hợp lệ, không thể hoàn kho.", detail = restoreResult.InsufficientItems });
+            }
+
+            order.OrderStatus = "RETURNED";
+            order.StaffNote = dto.Reason;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Đã kiểm tra hàng trả hợp lệ và hoàn kho thành công.",
+                status = "RETURNED",
+                lowStockWarnings = restoreResult.LowStockWarnings
+            });
+        }
+    }
+
+    public class CancelOrderAdminDto
+    {
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class ProcessReturnDto
+    {
+        public bool IsValidReturn { get; set; }
+        public string? Reason { get; set; }
+    }
+
+    public class UpdateOrderStatusDto
+    {
+        public string Status { get; set; } = string.Empty;
     }
 }

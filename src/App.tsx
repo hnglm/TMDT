@@ -112,6 +112,21 @@ interface UserSession {
   avatarUrl?: string;
   status?: string;
 }
+
+const canAccessAdminArea = (user: UserSession | null) => {
+  const role = String(user?.role || "").toLowerCase();
+  const roleCode = String(user?.roleCode || "").toLowerCase();
+
+  return (
+    role === "admin" ||
+    roleCode === "admin" ||
+    roleCode === "manager" ||
+    roleCode === "sales_staff" ||
+    roleCode === "warehouse_staff" ||
+    roleCode === "shipper"
+  );
+};
+
 export default function App() {
   const PRODUCT_PAGE_SIZE = 12;
   const CART_STORAGE_KEY = "luxehome_cart";
@@ -366,7 +381,11 @@ const savedRole = sessionStorage.getItem("user_role");
   const handleCloseAuth = useCallback(() => setIsAuthOpen(false), []);
 
   const handleLogin = useCallback((user: any) => {
-    setCurrentUser(user);
+    setCurrentUser({
+      ...user,
+      role: user.role === "admin" ? "admin" : "user",
+      roleCode: user.roleCode || user.RoleCode || "CUSTOMER",
+    });
     if (user.role === "admin") {
       setActiveTab("admin");
       alert(`Xin kính chào Quản Trị Viên: ${user.name}. Đã chuyển hướng vào Ban quản trị!`);
@@ -481,40 +500,42 @@ const savedRole = sessionStorage.getItem("user_role");
     loadMyOrders();
   };
 
-  const handleUpdateOrderStatus = (orderId: string, status: Order["status"]) => {
+  const handleUpdateOrderStatus = async (orderId: string, status: Order["status"]) => {
+    const response = await orderApi.updateOrderStatus(orderId, status);
+    const persistedStatus = String(response?.status || status).toLowerCase() as Order["status"];
+
     setOrders((prev) =>
       prev.map((ord) => {
-        if (ord.id === orderId) {
-          const steps = [...ord.trackingSteps];
-          let stepTitle = "Thay đổi trạng thái";
-          let stepDesc = "Cập nhật tiến trình bởi LuxeHome Admin.";
+        if (ord.id !== orderId) return ord;
 
-          if (status === "confirmed") {
-            stepTitle = "Mộc sấy đóng bọc hoàn chỉnh";
-            stepDesc = "Đơn hàng đã qua kiểm duyệt xốp dầy PVD mạ vàng.";
-          } else if (status === "shipping") {
-            stepTitle = "Xe chuyên dùng đang lăn bánh";
-            stepDesc = "LuxeHome điều phối tài xế chuyên nghiệp thợ mộc giao hàng.";
-          } else if (status === "completed") {
-            stepTitle = "Hoàn tất bàn giao & Lắp ráp";
-            stepDesc = "Gia chủ hài lòng nghiệm thu gỗ mộc đẹp 100%.";
-          }
+        const steps = [...ord.trackingSteps];
+        let stepTitle = "Thay đổi trạng thái";
+        let stepDesc = "Cập nhật tiến trình bởi LuxeHome Admin.";
 
-          steps.push({
-            status,
-            title: stepTitle,
-            description: stepDesc,
-            time: new Date().toLocaleTimeString("vi-VN").substring(0, 5) + " Hôm nay",
-          });
-
-          return {
-            ...ord,
-            status,
-            trackingSteps: steps,
-            paymentStatus: status === "completed" ? "Đã thanh toán" as const : ord.paymentStatus,
-          };
+        if (persistedStatus === "confirmed") {
+          stepTitle = "Mộc sấy đóng bọc hoàn chỉnh";
+          stepDesc = "Đơn hàng đã qua kiểm duyệt xốp dầy PVD mạ vàng.";
+        } else if (persistedStatus === "shipping") {
+          stepTitle = "Xe chuyên dùng đang lăn bánh";
+          stepDesc = "LuxeHome điều phối tài xế chuyên nghiệp thợ mộc giao hàng.";
+        } else if (persistedStatus === "completed") {
+          stepTitle = "Hoàn tất bàn giao & Lắp ráp";
+          stepDesc = "Gia chủ hài lòng nghiệm thu gỗ mộc đẹp 100%.";
         }
-        return ord;
+
+        steps.push({
+          status: persistedStatus,
+          title: stepTitle,
+          description: stepDesc,
+          time: new Date().toLocaleTimeString("vi-VN").substring(0, 5) + " Hôm nay",
+        });
+
+        return {
+          ...ord,
+          status: persistedStatus,
+          trackingSteps: steps,
+          paymentStatus: persistedStatus === "completed" ? ("Đã thanh toán" as const) : ord.paymentStatus,
+        };
       })
     );
   };
@@ -590,55 +611,59 @@ const savedRole = sessionStorage.getItem("user_role");
   };
 
   const handleEditProduct = async (updatedProduct: Product) => {
-    try {
-      // Gọi API gửi dữ liệu xuống Backend (Đã thêm Status, MetaTitle, MetaDescription, ImageUrl)
-      const payload: any = {
-        productName: updatedProduct.name,
-        categorySlug: updatedProduct.category,
-        currentPrice: updatedProduct.price,
-        stock: updatedProduct.stock,
-        style: updatedProduct.style,
-        material: updatedProduct.material,
-        status: (updatedProduct as any).status || "ACTIVE",
-        metaTitle: (updatedProduct as any).metaTitle || "",
-        metaDescription: (updatedProduct as any).metaDescription || ""
-      };
+  try {
+    const payload: any = {
+      productName: updatedProduct.name,
+      categorySlug: updatedProduct.category,
+      currentPrice: updatedProduct.price,
+      stock: updatedProduct.stock,
+      style: updatedProduct.style,
+      material: updatedProduct.material,
+      status: (updatedProduct as any).status || "ACTIVE",
+      metaTitle: (updatedProduct as any).metaTitle || "",
+      metaDescription: (updatedProduct as any).metaDescription || ""
+    };
 
-      // Gửi mảng ảnh nếu có thay đổi ảnh chính
-      if (updatedProduct.images && updatedProduct.images.length > 0) {
-        payload.imageUrl = updatedProduct.images[0];
-      }
-
-      const response = await fetch(`http://localhost:5200/api/products/${updatedProduct.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) throw new Error("Cập nhật sản phẩm thất bại trên Server.");
-
-      // Cập nhật mượt mà UI không cần reload trang
-      setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
-      alert("Đã lưu thay đổi thông tin sản phẩm thành công!");
-    } catch (error) {
-      console.error(error);
-      alert("Đã xảy ra lỗi khi lưu chỉnh sửa.");
+    if (updatedProduct.images && updatedProduct.images.length > 0) {
+      payload.imageUrl = updatedProduct.images[0];
     }
-  };
 
-  const handleUpdateProductStock = async (productId: string, newStock: number) => {
-    try {
-      const response = await fetch(`http://localhost:5200/api/products/${productId}/stock`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newStock),
-      });
-      if (!response.ok) throw new Error("Lỗi đồng bộ tồn kho.");
-      setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stock: newStock } : p)));
-    } catch (error) {
-      console.error(error);
+    const response = await fetch(`http://localhost:5200/api/products/${updatedProduct.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
+      throw new Error(errBody?.detail || errBody?.message || "Cập nhật sản phẩm thất bại trên Server.");
     }
-  };
+
+    setProducts((prev) => prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)));
+    alert("Đã lưu thay đổi thông tin sản phẩm thành công!");
+  } catch (error: any) {
+    console.error(error);
+    alert(`Đã xảy ra lỗi khi lưu chỉnh sửa: ${error.message}`);
+  }
+};
+
+const handleUpdateProductStock = async (productId: string, newStock: number) => {
+  try {
+    const response = await fetch(`http://localhost:5200/api/products/${productId}/stock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newStock }), // 👑 SỬA: khớp với UpdateStockDto { NewStock }
+    });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
+      throw new Error(errBody?.detail || errBody?.message || "Lỗi đồng bộ tồn kho.");
+    }
+    setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stock: newStock } : p)));
+  } catch (error: any) {
+    console.error(error);
+    alert(`Lỗi đồng bộ tồn kho: ${error.message}`);
+  }
+};
 
   const handleUpdateScheduleStatus = (scheduleId: string, status: ConsultationSchedule["status"]) => {
     setSchedules((prev) => prev.map((sch) => (sch.id === scheduleId ? { ...sch, status } : sch)));
@@ -740,7 +765,7 @@ const savedRole = sessionStorage.getItem("user_role");
         )}
 
         {activeTab === "admin" && (
-          currentUser && currentUser.role === "admin" ? (
+          canAccessAdminArea(currentUser) ? (
             <AdminPanel
               products={products}
               orders={orders}

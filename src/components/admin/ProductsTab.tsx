@@ -77,7 +77,7 @@ export default function ProductsTab({ categories, onUpdateProductStock, onAddPro
           categoryName: item.category?.categoryName || "Khác",
           style: item.style || "Modern",
           material: item.material || "",
-          stock: 10,
+          stock: item.stockQuantity ?? 0,
           images: item.productImages?.map((i:any)=>i.imageUrl) || [],
           status: item.status || "ACTIVE",
           metaTitle: item.metaTitle || "",

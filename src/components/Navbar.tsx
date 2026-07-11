@@ -7,7 +7,12 @@ interface NavbarProps {
   setActiveTab: (tab: string) => void;
   cart: CartItem[];
   wishlist: string[];
-  currentUser: { name: string; email: string } | null;
+  currentUser: {
+    name: string;
+    email: string;
+    role?: string;
+    roleCode?: string;
+  } | null;
   onOpenAuth: () => void;
   onOpenCart: () => void;
   onLogout: () => void;
@@ -24,6 +29,21 @@ export default function Navbar({
   onLogout,
 }: NavbarProps) {
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const currentRole = (currentUser?.roleCode || currentUser?.role || "").toLowerCase();
+  const isStaffRole =
+    currentRole === "sales_staff" ||
+    currentRole === "warehouse_staff" ||
+    currentRole === "shipper" ||
+    currentRole === "nhân viên bán hàng" ||
+    currentRole === "nhân viên kho" ||
+    currentRole === "đơn vị vận chuyển" ||
+    currentRole === "giao hàng";
+  const canAccessAdminPanel =
+    currentRole === "admin" ||
+    currentRole === "manager" ||
+    currentRole === "quản trị viên" ||
+    isStaffRole;
+  const adminButtonLabel = isStaffRole ? "Nhân viên" : "Quản trị admin";
 
   return (
     <nav className="sticky top-0 z-40 bg-[#FAF6F0]/95 backdrop-blur-md border-b border-[#EADBC8] shadow-sm">
@@ -79,7 +99,7 @@ export default function Navbar({
           <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 xl:gap-3 shrink-0" id="navbar-controls">
             
             {/* Admin trigger button with premium look - ONLY shown to logged-in administrators */}
-            {currentUser && (currentUser as any).role === "admin" && (
+            {currentUser && canAccessAdminPanel && (
               <button
                 onClick={() => setActiveTab("admin")}
                 className={`flex items-center gap-1 px-2 py-1 sm:gap-1.5 sm:px-3 sm:py-1.5 rounded-md text-[10px] sm:text-xs font-semibold uppercase tracking-wide sm:tracking-wider whitespace-nowrap shrink-0 border transition-all duration-300 ${
@@ -90,8 +110,7 @@ export default function Navbar({
                 id="btn-admin-panel"
               >
                 <ShieldAlert className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                <span>Q.Trị</span>
-                <span className="hidden md:inline">(Admin)</span>
+                <span>{adminButtonLabel}</span>
               </button>
             )}
 

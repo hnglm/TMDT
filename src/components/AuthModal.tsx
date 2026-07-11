@@ -19,6 +19,7 @@ interface AuthModalProps {
     name: string;
     email: string;
     role?: "user" | "admin";
+    roleCode?: string;
     phone?: string;
     avatarUrl?: string;
   }) => void;
@@ -105,6 +106,7 @@ function AuthModalContent({ onClose, onLogin }: AuthModalProps) {
       name: normalizedUser.name,
       email: normalizedUser.email,
       role: normalizedUser.role,
+      roleCode: normalizedUser.roleCode,
       phone: normalizedUser.phone,
       avatarUrl: normalizedUser.avatarUrl,
     });
