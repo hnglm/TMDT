@@ -206,6 +206,12 @@ if (alreadyRequested)
     if (firstItem == null)
         throw new Exception("Đơn hàng này chưa có sản phẩm chi tiết nên không thể tạo yêu cầu hoàn hàng.");
 
+    var requestType = (dto.RequestType == "WARRANTY") ? "WARRANTY" : "RETURN";
+
+    // Bảo hành không bắt buộc nhập tài khoản hoàn tiền (vì không hoàn tiền)
+    if (requestType == "RETURN" && string.IsNullOrWhiteSpace(dto.AccountInfo))
+        throw new Exception("Vui lòng nhập thông tin tài khoản nhận hoàn tiền.");
+
     var request = new ReturnWarrantyRequest
     {
         OrderId = order.Id,
@@ -213,13 +219,13 @@ if (alreadyRequested)
         UserId = userId,
 
         RequestCode = "RW" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        RequestType = "RETURN",
+        RequestType = requestType,
 
         Reason = dto.Reason,
         Description = dto.Description,
-        AccountInfo = dto.AccountInfo,
+        AccountInfo = requestType == "RETURN" ? dto.AccountInfo : null,
 
-        RefundAmount = firstItem.TotalPrice,
+        RefundAmount = requestType == "RETURN" ? firstItem.TotalPrice : null,
         Status = "PENDING",
         CreatedAt = DateTime.UtcNow.AddHours(7),
 

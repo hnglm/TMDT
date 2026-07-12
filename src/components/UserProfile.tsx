@@ -76,6 +76,7 @@ const cancelReasons = [
   ];
 const [selectedReturnReason, setSelectedReturnReason] = useState<string>("");
 const [customReturnReason, setCustomReturnReason] = useState<string>("");
+const [returnRequestType, setReturnRequestType] = useState<"RETURN" | "WARRANTY">("RETURN");
 const [returnImages, setReturnImages] = useState<File[]>([]);
 const [returnImagePreviews, setReturnImagePreviews] = useState<string[]>([]);
 const [returnImageError, setReturnImageError] = useState("");
@@ -342,6 +343,7 @@ const clearReturnForm = () => {
   setReturnImages([]);
   setReturnImagePreviews([]);
   setReturnImageError("");
+  setReturnRequestType("RETURN");
 };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="user-profile-layout">
@@ -1234,7 +1236,30 @@ setCurrentReviewImageUrl("");
       <h3 className="font-bold text-lg mb-4 text-[#1A1A1A]">
         Hoàn hàng / Bảo hành đơn {selectedOrder.id}
       </h3>
-
+      {/* MỚI: Chọn loại yêu cầu */}
+      <div className="mb-4">
+        <p className="text-xs text-gray-500 mb-2">Loại yêu cầu:</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setReturnRequestType("RETURN")}
+            className={`flex-1 py-2 rounded-lg font-bold uppercase text-xs ${
+              returnRequestType === "RETURN" ? "bg-[#5C4033] text-white" : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            Đổi Trả
+          </button>
+          <button
+            type="button"
+            onClick={() => setReturnRequestType("WARRANTY")}
+            className={`flex-1 py-2 rounded-lg font-bold uppercase text-xs ${
+              returnRequestType === "WARRANTY" ? "bg-[#5C4033] text-white" : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            Bảo Hành
+          </button>
+        </div>
+      </div>
       {/* 1. Danh sách lý do có sẵn */}
       <div className="space-y-2 mb-4">
         <p className="text-xs text-gray-500 mb-2">
@@ -1331,6 +1356,7 @@ setCurrentReviewImageUrl("");
 
             try {
               await orderApi.requestReturnWarranty(selectedOrder.id, {
+              requestType: returnRequestType,
               reason: finalReturnReason,
               description: customReturnReason,
               accountInfo: currentUser.email,

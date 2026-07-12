@@ -151,6 +151,79 @@ namespace LuxeHome.Application.Services
             return result;
         }
 
+        // ==========================================================================
+        // THÊM 2 HÀM NÀY VÀO CLASS InventoryService HIỆN CÓ CỦA BẠN
+        // (đặt sau hàm RestoreStockForOrderAsync, trước hàm private CheckThreshold)
+        // Lý do cần thêm: RestoreStockForOrderAsync hoàn kho CẢ ĐƠN, nhưng đổi trả/bảo hành
+        // chỉ xử lý MỘT sản phẩm (OrderItem) trong đơn, nên cần hàm thao tác theo variant lẻ.
+        // ==========================================================================
+
+        /// <summary>
+        /// "Hoàn kho sản phẩm trả lại" — dùng khi khách đổi trả 1 sản phẩm cụ thể (không phải cả đơn)
+        /// </summary>
+        public async Task<StockCheckResult> RestoreStockForVariantAsync(long variantId, long productId, int quantity)
+        {
+            var result = new StockCheckResult();
+
+            var stock = await _db.InventoryStocks.FirstOrDefaultAsync(s => s.VariantId == variantId);
+
+            if (stock == null)
+            {
+                stock = new InventoryStock
+                {
+                    ProductId = productId,
+                    VariantId = variantId,
+                    QuantityOnHand = quantity,
+                    QuantityReserved = 0,
+                    QuantityAvailable = quantity,
+                    MinStockLevel = 5,
+                    StockStatus = "IN_STOCK",
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _db.InventoryStocks.Add(stock);
+            }
+            else
+            {
+                stock.QuantityOnHand = (stock.QuantityOnHand ?? 0) + quantity;
+                stock.QuantityAvailable = (stock.QuantityAvailable ?? 0) + quantity;
+                stock.UpdatedAt = DateTime.UtcNow;
+            }
+
+            CheckThreshold(stock, result);
+
+            await _db.SaveChangesAsync();
+            result.Success = true;
+            return result;
+        }
+
+        /// <summary>
+        /// "Xuất kho sản phẩm đổi (nếu có)" — dùng khi khách đổi sang sản phẩm/biến thể khác
+        /// </summary>
+        public async Task<StockCheckResult> DeductStockForVariantAsync(long variantId, int quantity)
+        {
+            var result = new StockCheckResult();
+
+            var stock = await _db.InventoryStocks.FirstOrDefaultAsync(s => s.VariantId == variantId);
+            int available = stock?.QuantityAvailable ?? 0;
+
+            if (stock == null || available < quantity)
+            {
+                result.Success = false;
+                result.InsufficientItems.Add($"Biến thể #{variantId} - Cần {quantity}, còn {available}");
+                return result;
+            }
+
+            stock.QuantityOnHand = (stock.QuantityOnHand ?? 0) - quantity;
+            stock.QuantityAvailable = (stock.QuantityAvailable ?? 0) - quantity;
+            stock.UpdatedAt = DateTime.UtcNow;
+
+            CheckThreshold(stock, result);
+
+            await _db.SaveChangesAsync();
+            result.Success = true;
+            return result;
+        }
+
         /// <summary>
         /// "Kiểm tra ngưỡng cảnh báo hàng sắp hết" -> "Cảnh báo hàng sắp hết"
         /// (nhánh "Không dưới ngưỡng" -> không cảnh báo, hiển thị kết quả xử lý thành công)

@@ -770,38 +770,21 @@ export default function OrdersTab({ orders: propOrders, onUpdateOrderStatus }: O
                     )}
 
                     {/* 📦 SWIMLANE 2: NHÂN VIÊN KHO (WAREHOUSE) */}
-                    {isWarehouse && (
-                      <>
-                        {currentStatus === STATUS.SHIPPING && !selectedOrder.shippingStatus && (
-                          <button
-                            onClick={() => handleProcessWorkflow(selectedOrder.id, "warehouse-prepare")}
-                            className="w-full bg-purple-600 text-white p-2.5 rounded-lg font-bold hover:bg-purple-700 transition-colors shadow-md text-center uppercase tracking-wider"
-                          >
-                            📦 Kho: Xác Nhận Chuẩn Bị Hàng Thành Công
-                          </button>
-                        )}
-
-                        {/* 🆕 Tạo yêu cầu giao hàng + bàn giao cho đơn vị vận chuyển
-                            (áp dụng cho đơn đã duyệt SHIPPING, hoặc đơn giao thất bại cần tạo lại yêu cầu) */}
-                        {(currentStatus === STATUS.SHIPPING || currentStatus === STATUS.DELIVERY_FAILED) && (
-                          <KhoDeliveryRequestBox orderId={selectedOrder.id} onDone={fetchAdminOrders} />
-                        )}
-
-                        {currentStatus !== STATUS.SHIPPING && currentStatus !== STATUS.DELIVERY_FAILED && (
-                          <div className="text-center text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-200 italic">
-                            {currentStatus === STATUS.PENDING || currentStatus === STATUS.CONFIRMED
-                              ? "🔒 Đơn chưa được duyệt, Kho chưa xử lý."
+                      {isWarehouse && (
+                        <div className="text-center text-gray-500 bg-gray-50 p-3 rounded-xl border border-gray-200 italic">
+                          {currentStatus === STATUS.PENDING || currentStatus === STATUS.CONFIRMED
+                            ? "🔒 Đơn chưa được duyệt, Kho chưa xử lý."
+                            : currentStatus === STATUS.SHIPPING
+                              ? "📦 Đơn đã sẵn sàng giao. Vui lòng qua tab \"Giao Hàng\" để chọn đơn vị vận chuyển và bàn giao."
                               : currentStatus === STATUS.DELIVERED
-                                ? "🚚 Hàng đã xuất kho, đang giao và chờ Sales thu tiền."
+                                ? "🚚 Hàng đã giao thành công, đang chờ Sales thu tiền."
                                 : currentStatus === STATUS.COMPLETED
                                   ? "✅ Đơn hàng đã thanh toán và hoàn tất chu kỳ kho."
                                   : currentStatus === STATUS.RETURNED
                                     ? "🔁 Hàng trả đã được hoàn kho."
                                     : "Đơn hàng đã hủy."}
-                          </div>
-                        )}
-                      </>
-                    )}
+                        </div>
+                      )}
 
                     {/* 🛡️ SWIMLANE 3: QUẢN TRỊ VIÊN (ADMIN) - QUAN SÁT TIẾN ĐỘ VÀ ĐỐI SOÁT */}
                     {isAdmin && (

@@ -143,27 +143,59 @@ namespace LuxeHome.API.Controllers
             }
         }
 
+        // ==========================================================================
+        // THAY THẾ action VnPayReturn HIỆN CÓ trong OrdersController.cs bằng bản này
+        // Chỉ thêm đoạn tạo Payment record khi responseCode == "00" (thanh toán thành công)
+        // Mọi thứ khác (validate chữ ký, kiểm tra số tiền, redirect...) giữ nguyên 100%
+        // ==========================================================================
+
         [HttpGet("vnpay-return")]
         public async Task<IActionResult> VnPayReturn()
         {
             var query = Request.Query;
 
             if (!query.ContainsKey("vnp_SecureHash"))
+            {
                 return Ok("ReturnUrl VNPay hoạt động. Hãy thanh toán qua paymentUrl để VNPay redirect về đây.");
+            }
 
             string vnpHashSecret = _config["Vnpay:HashSecret"] ?? "";
+
             bool isValid = _vnpay.ValidateSignature(query, vnpHashSecret);
 
             if (!isValid)
+            {
+                Console.WriteLine("===== VNPAY RETURN INVALID SIGNATURE =====");
+                Console.WriteLine(Request.QueryString.ToString());
+                Console.WriteLine("==========================================");
+
                 return BadRequest("Chữ ký không hợp lệ!");
+            }
 
             string responseCode = query["vnp_ResponseCode"].ToString();
             string txnRef = query["vnp_TxnRef"].ToString();
-            string amountRaw = query["vnp_Amount"].ToString();
 
-            var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderCode == txnRef);
+            Console.WriteLine("DEBUG: Đang tìm đơn hàng với OrderCode: " + txnRef);
+            string amountRaw = query["vnp_Amount"].ToString();
+            string transactionNo = query["vnp_TransactionNo"].ToString();
+
+            Console.WriteLine("===== VNPAY RETURN VALID =====");
+            Console.WriteLine("ResponseCode: " + responseCode);
+            Console.WriteLine("TxnRef: " + txnRef);
+            Console.WriteLine("Amount: " + amountRaw);
+            Console.WriteLine("TransactionNo: " + transactionNo);
+            Console.WriteLine("==============================");
+
+            var order = await _db.Orders
+                .FirstOrDefaultAsync(o => o.OrderCode == txnRef);
+
             if (order == null)
+            {
+                Console.WriteLine("Không tìm thấy đơn hàng với TxnRef: " + txnRef);
+                var totalOrders = await _db.Orders.CountAsync();
+                Console.WriteLine($"DEBUG: Không tìm thấy. Tổng số đơn hàng trong DB: {totalOrders}");
                 return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=order-not-found");
+            }
 
             decimal vnpAmount = decimal.Parse(amountRaw, CultureInfo.InvariantCulture) / 100;
             decimal orderAmount = order.FinalAmount ?? 0;
@@ -172,7 +204,9 @@ namespace LuxeHome.API.Controllers
             {
                 order.PaymentStatus = "INVALID_AMOUNT";
                 order.OrderStatus = "PAYMENT_FAILED";
+
                 await _db.SaveChangesAsync();
+
                 return Redirect($"{FrontendBaseUrl}/checkout/fail?reason=invalid-amount");
             }
 
@@ -181,12 +215,31 @@ namespace LuxeHome.API.Controllers
                 order.PaymentStatus = "PAID";
                 order.OrderStatus = "CONFIRMED";
                 order.ConfirmedAt = DateTime.UtcNow;
+
+                // 🆕 Ghi nhận thanh toán thật vào bảng payments (để báo cáo "Thanh Toán" có dữ liệu)
+                // Chỉ tạo nếu đơn này CHƯA có bản ghi thanh toán nào (tránh trùng nếu VNPay gọi callback 2 lần)
+                var paymentExists = await _db.Payments.AnyAsync(p => p.OrderId == order.Id);
+                if (!paymentExists)
+                {
+                    _db.Payments.Add(new Payment
+                    {
+                        OrderId = order.Id,
+                        Amount = orderAmount,
+                        PaymentMethod = "VNPAY",
+                        PaymentStatus = "PAID",
+                        PaidAt = DateTime.UtcNow,
+                        TransactionCode = transactionNo
+                    });
+                }
+
                 await _db.SaveChangesAsync();
+
                 return Redirect($"{FrontendBaseUrl}/checkout/success?orderId={txnRef}");
             }
 
             order.PaymentStatus = "FAILED";
             order.OrderStatus = "PAYMENT_FAILED";
+
             await _db.SaveChangesAsync();
 
             return Redirect($"{FrontendBaseUrl}/checkout/fail?orderId={txnRef}");
@@ -503,6 +556,11 @@ namespace LuxeHome.API.Controllers
             return Ok(new { message = "Kho đã chuẩn bị hàng xong, đơn chuyển sang trạng thái Đang Giao Hàng.", status = "DELIVERED" });
         }
 
+        // ==========================================================================
+        // THAY THẾ action UpdateOrderStatus HIỆN CÓ trong OrdersController.cs bằng bản này
+        // Chỉ thêm đoạn tạo Payment record khi đơn chuyển COMPLETED — mọi thứ khác giữ nguyên
+        // ==========================================================================
+
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateOrderStatus(long id, [FromBody] UpdateOrderStatusDto dto)
         {
@@ -515,6 +573,22 @@ namespace LuxeHome.API.Controllers
             {
                 order.PaymentStatus = "PAID";
                 order.ConfirmedAt = order.ConfirmedAt ?? DateTime.UtcNow;
+
+                // 🆕 Ghi nhận thanh toán thật vào bảng payments (để báo cáo "Thanh Toán" có dữ liệu)
+                // Chỉ tạo nếu đơn này CHƯA có bản ghi thanh toán nào (tránh tạo trùng khi bấm nhiều lần)
+                var paymentExists = await _db.Payments.AnyAsync(p => p.OrderId == order.Id);
+                if (!paymentExists)
+                {
+                    _db.Payments.Add(new Payment
+                    {
+                        OrderId = order.Id,
+                        Amount = order.FinalAmount ?? 0,
+                        PaymentMethod = "CASH", // Sales ghi nhận thanh toán tại quầy/COD theo luồng hiện tại
+                        PaymentStatus = "PAID",
+                        PaidAt = DateTime.UtcNow,
+                        TransactionCode = "CASH-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+                }
             }
 
             await _db.SaveChangesAsync();

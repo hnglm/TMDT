@@ -58,6 +58,7 @@ public partial class LuxeHomeDbContext : DbContext
     
     public virtual DbSet<CustomerPromotionWallet> CustomerPromotionWallets { get; set; }
 
+    public virtual DbSet<CustomerCareLog> CustomerCareLogs { get; set; }
     
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

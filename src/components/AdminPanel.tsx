@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BarChart3, Package, ShoppingCart, Users, Tag, Calendar, Layers, DollarSign, Truck } from "lucide-react";
+import { BarChart3, Package, ShoppingCart, Users, Tag, Layers, DollarSign, Truck, RotateCcw } from "lucide-react";
 import { Product, Order, ConsultationSchedule, Coupon, BlogPost } from "../types";
 
 // Import các Component con
@@ -8,11 +8,12 @@ import ProductsTab from "./admin/ProductsTab";
 import CategoriesTab from "./admin/CategoriesTab";
 import PricingTab from "./admin/PricingTab";
 import OrdersTab from "./admin/OrdersTab";
-import SchedulesTab from "./admin/SchedulesTab";
 import CouponsTab from "./admin/CouponsTab";
 import UsersTab from "./admin/UsersTab";
 import ShipmentTab from "./admin/ShipmentTab";
-import WarehouseShipmentTab from "./admin/WarehouseShipmentTab.tsx";
+import CustomersTab from "./admin/CustomersTab";
+import ReturnWarrantyTab from "./admin/ReturnWarrantyTab";
+import WarehouseShipmentTab from "./admin/WarehouseShipmentTab";
 
 export interface Category {
   id: number;
@@ -48,11 +49,12 @@ export default function AdminPanel(props: AdminPanelProps) {
   const ALL_TABS = [
     { id: "dashboard", label: "Phân Tích", icon: BarChart3 },
     { id: "orders", label: "Đơn Hàng", icon: ShoppingCart },
-    { id: "shipments", label: "Giao Hàng", icon: Truck },
+    { id: "shipping", label: "Giao Hàng", icon: Truck },
+    { id: "customers", label: "CSKH", icon: Users },
+    { id: "returns", label: "Đổi Trả/BH", icon: RotateCcw },
     { id: "products", label: "Kho & Sản Phẩm", icon: Package },
     { id: "categories", label: "Danh Mục", icon: Layers },
     { id: "pricing", label: "Quản Lý Giá", icon: DollarSign },
-    { id: "schedules", label: "Tư Vấn", icon: Calendar },
     { id: "coupons", label: "Mã Ưu Đãi", icon: Tag },
     { id: "users", label: "Tài Khoản", icon: Users },
   ];
@@ -61,20 +63,23 @@ export default function AdminPanel(props: AdminPanelProps) {
   const isAdmin = currentRole === "admin" || currentRole === "quản trị viên";
   const isSales = currentRole === "sales_staff" || currentRole === "nhân viên bán hàng";
   const isWarehouse = currentRole === "warehouse_staff" || currentRole === "nhân viên kho";
-  const isShipper = currentRole === "shipper" || currentRole === "giao hàng" || currentRole === "đơn vị vận chuyển";
+  // MỚI: vai trò "Đơn vị vận chuyển" trong sơ đồ AD_Tạo yêu cầu giao hàng
+  // role_code thực tế trong DB của bạn là "SHIPPER" (xem bảng roles), roleId = 6
+  const roleId = Number(currentUser?.roleId || currentUser?.RoleId || 0);
+  const isShipper = currentRole === "shipper" || currentRole === "đơn vị vận chuyển" || roleId === 6;
 
   // 🔐 2. BỘ LỌC CHẤP NHẬN CẢ TIẾNG ANH LẪN TIẾNG VIỆT THEO ĐÚNG SƠ ĐỒ
   const allowedTabs = ALL_TABS.filter((tab) => {
-    if (isAdmin) return true;
-    if (isSales) return tab.id === "orders";
-    if (isWarehouse) return tab.id === "orders" || tab.id === "products" || tab.id === "shipments";
-    if (isShipper) return tab.id === "shipments";
+    if (isAdmin) return true; // Admin tối cao thấy hết
+    if (isSales) return tab.id === "orders" || tab.id === "customers" || tab.id === "returns"; // Sales thấy Đơn Hàng + CSKH + Đổi trả
+    if (isWarehouse) return tab.id === "orders" || tab.id === "products" || tab.id === "returns" || tab.id === "shipping"; // Kho thấy Đơn & Kho sản phẩm + Bảo hành
+    if (isShipper) return tab.id === "shipping"; // Đơn vị vận chuyển chỉ thấy Giao Hàng
     return false;
   });
 
   // 🔐 3. ĐIỀU HƯỚNG TRANG KHI LOG IN ĐỂ TRÁNH LỖI TRẮNG TRANG
   const [activeSubTab, setActiveSubTab] = useState<string>(() => {
-    if (isShipper) return "shipments";
+    if (isShipper) return "shipping";
     if (isSales || isWarehouse) return "orders";
     return "dashboard";
   });
@@ -119,7 +124,7 @@ export default function AdminPanel(props: AdminPanelProps) {
       {/* Dynamic Component Rendering */}
       <div className="bg-white rounded-2xl border border-[#EADBC8] p-6 md:p-8">
         {activeSubTab === "dashboard" && isAdmin && (
-          <DashboardTab orders={props.orders} schedules={props.schedules} coupons={props.coupons} />
+        <DashboardTab />
         )}
         {activeSubTab === "pricing" && isAdmin && (
           <PricingTab />
@@ -133,14 +138,20 @@ export default function AdminPanel(props: AdminPanelProps) {
         {activeSubTab === "orders" && (isAdmin || isSales || isWarehouse) && (
           <OrdersTab orders={props.orders} onUpdateOrderStatus={props.onUpdateOrderStatus} />
         )}
-        {activeSubTab === "shipments" && (isAdmin || isWarehouse) && (
+        {/* Tab Giao Hàng: Kho tạo yêu cầu, Shipper xử lý giao (Admin thấy cả 2 để giám sát) */}
+        {activeSubTab === "shipping" && (isAdmin || isWarehouse) && (
           <WarehouseShipmentTab />
         )}
-        {activeSubTab === "shipments" && (isAdmin || isShipper) && (
+        {activeSubTab === "shipping" && (isAdmin || isShipper) && (
           <ShipmentTab />
         )}
-        {activeSubTab === "coupons" && isAdmin && (
-          <CouponsTab />
+        {/* MỚI: Tab CSKH cho Sales (và Admin để giám sát) */}
+        {activeSubTab === "customers" && (isAdmin || isSales) && (
+          <CustomersTab />
+        )}
+        {/* MỚI: Tab Đổi Trả/Bảo Hành cho Sales + Kho (và Admin để giám sát) */}
+        {activeSubTab === "returns" && (isAdmin || isSales || isWarehouse) && (
+          <ReturnWarrantyTab />
         )}
         {activeSubTab === "users" && isAdmin && (
           <UsersTab />

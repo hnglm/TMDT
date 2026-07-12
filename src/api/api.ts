@@ -102,6 +102,7 @@ export const orderApi = {
   requestReturnWarranty: async (
     orderId: string,
     data: {
+      requestType?: "RETURN" | "WARRANTY";
       reason: string;
       accountInfo?: string;
       description?: string;
@@ -109,6 +110,7 @@ export const orderApi = {
     }
   ) => {
     const formData = new FormData();
+    formData.append("RequestType", data.requestType || "RETURN");
     formData.append("Reason", data.reason);
     formData.append("AccountInfo", data.accountInfo || "");
     formData.append("Description", data.description || "");
@@ -316,6 +318,136 @@ export const promotionApi = {
   }) => {
     const response = await api.get("/api/promotions/my", { params });
     return response.data;
+  },
+};
+
+export const productSearchApi = {
+  search: async (query: string) => {
+    const response = await api.get(`/api/products`, {
+      params: {
+        page: 1,
+        pageSize: 10,
+        search: query,
+      },
+    });
+    return response.data;
+  },
+};
+
+// ==========================================================================
+// THÊM ĐOẠN NÀY VÀO FILE src/api/api.ts HIỆN CÓ CỦA BẠN
+// (đặt ngay sau khối `export const shipmentApi = { ... };` hoặc `orderApi`)
+// ==========================================================================
+
+export const customerApi = {
+  // "Xem danh sách khách hàng"
+  getCustomers: async () => {
+    const response = await api.get('/api/Customers');
+    return response.data;
+  },
+
+  // "Xem chi tiết khách hàng"
+  getCustomerDetail: async (customerId: number) => {
+    const response = await api.get(`/api/Customers/${customerId}`);
+    return response.data;
+  },
+
+  // "Xem lịch sử mua hàng"
+  getCustomerOrders: async (customerId: number) => {
+    const response = await api.get(`/api/Customers/${customerId}/orders`);
+    return response.data;
+  },
+
+  // "Theo dõi phản hồi khách hàng" — lấy toàn bộ nhật ký chăm sóc
+  getCareLogs: async (customerId: number) => {
+    const response = await api.get(`/api/Customers/${customerId}/care-logs`);
+    return response.data;
+  },
+
+  // "Ghi chú nhu cầu" + "Gửi thông báo chăm sóc khách hàng"
+  createCareLog: async (customerId: number, data: { needNote?: string; careType: string; careMessage: string }) => {
+    const response = await api.post(`/api/Customers/${customerId}/care-logs`, data);
+    return response.data;
+  },
+
+  // Nhánh "Có phản hồi" -> "Cập nhật kết quả chăm sóc"
+  updateCareResponse: async (careLogId: number, responseResult: string) => {
+    const response = await api.put(`/api/Customers/care-logs/${careLogId}/response`, { responseResult });
+    return response.data;
+  },
+
+  // Nhánh "Không phản hồi" -> "Đánh dấu chờ phản hồi / lên lịch chăm sóc lại"
+  scheduleFollowUp: async (careLogId: number, nextFollowUpAt?: string | null) => {
+    const response = await api.put(`/api/Customers/care-logs/${careLogId}/schedule`, { nextFollowUpAt });
+    return response.data;
+  },
+};
+
+export const returnWarrantyApi = {
+  // NHÂN VIÊN (Sales/Kho/Admin) — xem danh sách yêu cầu (backend tự lọc theo role)
+  getRequests: async () => {
+    const response = await api.get('/api/ReturnWarranty');
+    return response.data;
+  },
+  getRequestDetail: async (id: number) => {
+    const response = await api.get(`/api/ReturnWarranty/${id}`);
+    return response.data;
+  },
+  acceptRequest: async (id: number) => {
+    const response = await api.put(`/api/ReturnWarranty/${id}/accept`);
+    return response.data;
+  },
+  rejectRequest: async (id: number, resultNote: string) => {
+    const response = await api.put(`/api/ReturnWarranty/${id}/reject`, { resultNote });
+    return response.data;
+  },
+  completeRequest: async (
+    id: number,
+    data?: { resultNote?: string; exchangeVariantId?: number; exchangeProductId?: number; exchangeQuantity?: number }
+  ) => {
+    const response = await api.put(`/api/ReturnWarranty/${id}/complete`, data || {});
+    return response.data;
+  },
+};
+
+export const reportApi = {
+  getReport: async (params: {
+    reportType: "revenue" | "profit" | "best-selling" | "payment";
+    fromDate?: string;
+    toDate?: string;
+    categorySlug?: string;
+  }) => {
+    const response = await api.get("/api/Report", { params });
+    return response.data;
+  },
+  getMonthlyOverview: async () => {
+  const response = await api.get("/api/Report/monthly-overview");
+  return response.data;
+},
+
+  exportReport: async (params: {
+    reportType: "revenue" | "profit" | "best-selling" | "payment";
+    fromDate?: string;
+    toDate?: string;
+    categorySlug?: string;
+  }) => {
+    const response = await api.get("/api/Report/export", {
+      params,
+      responseType: "blob",
+    });
+
+    const url = URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+
+    const disposition = response.headers["content-disposition"];
+    const fileNameMatch = disposition && disposition.match(/filename="?(.+)"?/);
+    link.download = fileNameMatch ? fileNameMatch[1] : `BaoCao_${params.reportType}.xlsx`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   },
 };
 
