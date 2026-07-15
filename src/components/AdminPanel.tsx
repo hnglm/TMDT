@@ -153,6 +153,9 @@ export default function AdminPanel(props: AdminPanelProps) {
         {activeSubTab === "returns" && (isAdmin || isSales || isWarehouse) && (
           <ReturnWarrantyTab />
         )}
+        {activeSubTab === "coupons" && isAdmin && (
+        <CouponsTab />
+        )}
         {activeSubTab === "users" && isAdmin && (
           <UsersTab />
         )}

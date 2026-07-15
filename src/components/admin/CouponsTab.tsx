@@ -70,16 +70,19 @@ export default function CouponsTab() {
   };
 
   const fetchPromotions = async () => {
-    setLoading(true);
-    try {
-      const data = await promotionApi.getAllAdmin();
-      setPromotions(data);
-    } catch (err) {
-      console.error("Lỗi lấy danh sách khuyến mãi:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+
+  try {
+    const data = await promotionApi.getAllAdmin();
+
+    setPromotions(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error("Lỗi lấy danh sách khuyến mãi:", err);
+    setPromotions([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchPromotions();
