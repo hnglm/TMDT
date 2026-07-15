@@ -451,4 +451,34 @@ export const reportApi = {
   },
 };
 
+// ==========================================================================
+// THÊM ĐOẠN NÀY VÀO FILE src/api/api.ts HIỆN CÓ CỦA BẠN
+// ==========================================================================
+
+export const customerChatApi = {
+  // KHÁCH HÀNG
+  getMyMessages: async () => {
+    const response = await api.get('/api/CustomerChat/my-messages');
+    return response.data;
+  },
+  sendAsCustomer: async (content: string) => {
+    const response = await api.post('/api/CustomerChat/send', { content });
+    return response.data;
+  },
+
+  // NHÂN VIÊN (Sales/Admin)
+  getConversations: async () => {
+    const response = await api.get('/api/CustomerChat/conversations');
+    return response.data;
+  },
+  getConversationMessages: async (customerId: number) => {
+    const response = await api.get(`/api/CustomerChat/conversations/${customerId}/messages`);
+    return response.data;
+  },
+  sendAsStaff: async (customerId: number, content: string) => {
+    const response = await api.post('/api/CustomerChat/send', { content, customerId });
+    return response.data;
+  },
+};
+
 export default api;

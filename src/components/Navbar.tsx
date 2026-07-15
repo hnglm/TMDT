@@ -1,12 +1,14 @@
 import React from "react";
 import { ShoppingBag, Heart, User, ShieldAlert, Sparkles, Compass, Layers, Ticket } from "lucide-react";
 import { CartItem } from "../types";
+import CustomerChatWidget from "../components/CustomerChatWidget";
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   cart: CartItem[];
   wishlist: string[];
   currentUser: {
+    id?: string | number | null;
     name: string;
     email: string;
     role?: string;
@@ -97,6 +99,9 @@ export default function Navbar({
 
           {/* Secondary Controls: Wishlist, Cart, Profile, Admin */}
           <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 xl:gap-3 shrink-0" id="navbar-controls">
+            {currentUser && (
+            <CustomerChatWidget currentUser={currentUser} />
+            )}
             
             {/* Admin trigger button with premium look - ONLY shown to logged-in administrators */}
             {currentUser && canAccessAdminPanel && (
