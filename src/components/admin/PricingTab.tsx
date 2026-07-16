@@ -141,7 +141,15 @@ export default function PricingTab() {
   const handleApplyChanges = async () => {
     if (selectedVariantIds.length === 0) { alert("Vui lòng tick chọn ít nhất 1 sản phẩm!"); return; }
     if (!changeValue || isNaN(Number(changeValue))) { alert("Vui lòng nhập mức thay đổi giá hợp lệ!"); return; }
-
+    if (applyDate) {
+      const selectedDate = new Date(applyDate);
+      const now = new Date();
+      if (selectedDate < now) {
+        alert("Lỗi: Ngày giờ áp dụng không được nằm trong quá khứ. Vui lòng chọn thời điểm ở tương lai!");
+        return;
+      }
+    }
+    
     try {
       let successCount = 0;
       for (const vId of selectedVariantIds) {

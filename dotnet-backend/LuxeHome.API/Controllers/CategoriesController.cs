@@ -15,12 +15,12 @@ public class CategoriesController : ControllerBase
         _context = context;
     }
 
-    // Lấy danh sách danh mục
+    // Lấy danh sách danh mục 
     [HttpGet]
     public async Task<IActionResult> GetCategories()
     {
         var categories = await _context.Categories
-            .Where(c => c.IsVisible == true)
+            
             .OrderBy(c => c.SortOrder)
             .Select(c => new CategoryDto
             {
@@ -29,7 +29,8 @@ public class CategoriesController : ControllerBase
                 CategoryName = c.CategoryName,
                 Slug = c.Slug,
                 ThumbnailUrl = c.ThumbnailUrl,
-                SortOrder = c.SortOrder
+                SortOrder = c.SortOrder,
+                IsVisible = c.IsVisible 
             })
             .ToListAsync();
 
@@ -44,7 +45,7 @@ public class CategoriesController : ControllerBase
         {
             CategoryName = dto.CategoryName,
             Slug = dto.Slug,
-            IsVisible = true,
+            IsVisible = dto.IsVisible ?? true, 
             SortOrder = dto.SortOrder ?? 0
         };
 
@@ -62,6 +63,11 @@ public class CategoriesController : ControllerBase
 
         category.CategoryName = dto.CategoryName;
         category.Slug = dto.Slug;
+        
+        if (dto.IsVisible.HasValue) 
+        {
+            category.IsVisible = dto.IsVisible.Value;
+        }
         
         await _context.SaveChangesAsync();
         return Ok(category);

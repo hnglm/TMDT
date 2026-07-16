@@ -8,5 +8,6 @@ namespace LuxeHome.Application.DTOs
         public string? Slug { get; set; }
         public string? ThumbnailUrl { get; set; }
         public int? SortOrder { get; set; }
+        public bool? IsVisible { get; set; }
     }
 }

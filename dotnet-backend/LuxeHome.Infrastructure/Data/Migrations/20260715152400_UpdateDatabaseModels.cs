@@ -7,12 +7,12 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LuxeHome.LuxeHome.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class AddReturnWarrantyDescriptionImages : Migration
+    public partial class UpdateDatabaseModels : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            
+           
         }
 
         /// <inheritdoc />

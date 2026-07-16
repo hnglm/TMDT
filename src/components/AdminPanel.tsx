@@ -19,6 +19,7 @@ export interface Category {
   id: number;
   categoryName: string;
   slug: string;
+  isVisible?: boolean;
 }
 
 interface AdminPanelProps {
